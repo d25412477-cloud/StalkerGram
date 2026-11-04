@@ -1,4 +1,3 @@
-
 package com.stalkergram.app
 
 import com.google.firebase.auth.FirebaseAuth
@@ -35,6 +34,7 @@ object ChatManager {
         }
 
         val id = chatId(senderUid, receiverUid)
+
         val messageRef = db.child("chats")
             .child(id)
             .child("messages")
@@ -45,7 +45,8 @@ object ChatManager {
             "senderId" to senderUid,
             "receiverId" to receiverUid,
             "text" to text.trim(),
-            "timestamp" to ServerValue.TIMESTAMP
+            "timestamp" to ServerValue.TIMESTAMP,
+            "read" to false
         )
 
         messageRef.setValue(message)
@@ -54,6 +55,39 @@ object ChatManager {
             }
             .addOnFailureListener { error ->
                 callback(false, error.message ?: "Ошибка отправки")
+            }
+    }
+
+    fun markMessagesRead(otherUid: String) {
+        val myUid = auth.currentUser?.uid ?: return
+
+        val id = chatId(myUid, otherUid)
+
+        val messagesRef = db.child("chats")
+            .child(id)
+            .child("messages")
+
+        messagesRef.get()
+            .addOnSuccessListener { snapshot ->
+
+                val updates = mutableMapOf<String, Any>()
+
+                for (message in snapshot.children) {
+                    val receiverId = message.child("receiverId")
+                        .getValue(String::class.java)
+
+                    val read = message.child("read")
+                        .getValue(Boolean::class.java)
+
+                    if (receiverId == myUid && read != true) {
+                        val key = message.key ?: continue
+                        updates["$key/read"] = true
+                    }
+                }
+
+                if (updates.isNotEmpty()) {
+                    messagesRef.updateChildren(updates)
+                }
             }
     }
 
@@ -71,6 +105,7 @@ object ChatManager {
         }
 
         val id = chatId(myUid, otherUid)
+
         val ref = db.child("chats")
             .child(id)
             .child("messages")
@@ -102,4 +137,3 @@ object ChatManager {
             .removeEventListener(listener)
     }
 }
-
