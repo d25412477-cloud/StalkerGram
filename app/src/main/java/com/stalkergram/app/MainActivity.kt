@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private var messagesListener: ValueEventListener? = null
     private var activeChatUid: String? = null
     private var searchQuery = ""
+    private var selectedSection = 0
 
     private val PICK_IMAGE_REQUEST = 1001
 
@@ -51,9 +52,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun dp(value: Int): Int {
-        return (value * resources.displayMetrics.density).toInt()
-    }
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     private fun newRoot(): LinearLayout {
         root = LinearLayout(this).apply {
@@ -120,7 +120,9 @@ class MainActivity : Activity() {
     }
 
     private fun clearAllListeners() {
-        chatListListener?.let { ChatListManager.removeListener(it) }
+        chatListListener?.let {
+            ChatListManager.removeListener(it)
+        }
         chatListListener = null
 
         val uid = activeChatUid
@@ -134,7 +136,77 @@ class MainActivity : Activity() {
         activeChatUid = null
     }
 
-    // ФОТОГРАФИЯ
+    // НИЖНЯЯ ПАНЕЛЬ НАВИГАЦИИ
+
+    private fun addBottomNavigation(selected: Int) {
+        val navigation = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            background = rounded(Color.rgb(24, 32, 43), 18)
+        }
+
+        val items = listOf(
+            Triple("💬", "Чаты", 0),
+            Triple("👥", "Контакты", 1),
+            Triple("👤", "Профиль", 2)
+        )
+
+        items.forEach { item ->
+            val active = selected == item.third
+
+            val tab = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                background = rounded(
+                    if (active) Color.rgb(25, 75, 55)
+                    else Color.TRANSPARENT,
+                    12
+                )
+                isClickable = true
+                isFocusable = true
+            }
+
+            val icon = makeText(
+                item.first,
+                22f,
+                if (active) Color.rgb(25, 220, 130)
+                else Color.LTGRAY
+            )
+            icon.gravity = Gravity.CENTER
+
+            val label = makeText(
+                item.second,
+                11f,
+                if (active) Color.rgb(25, 220, 130)
+                else Color.LTGRAY,
+                active
+            )
+            label.gravity = Gravity.CENTER
+
+            tab.addView(icon)
+            tab.addView(label)
+
+            tab.setOnClickListener {
+                when (item.third) {
+                    0 -> showHome()
+                    1 -> showContacts()
+                    2 -> showProfile()
+                }
+            }
+
+            navigation.addView(
+                tab,
+                LinearLayout.LayoutParams(0, dp(55), 1f)
+            )
+        }
+
+        val params = LinearLayout.LayoutParams(-1, dp(65))
+        params.topMargin = dp(8)
+        root.addView(navigation, params)
+    }
+
+    // ФОТОГРАФИЯ ПРОФИЛЯ
 
     private fun chooseProfilePhoto() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -307,6 +379,7 @@ class MainActivity : Activity() {
 
     private fun showProfile() {
         clearAllListeners()
+        selectedSection = 2
         newRoot()
 
         val uid = auth.currentUser?.uid ?: return
@@ -332,8 +405,6 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(1, dp(height))
             )
         }
-
-        // ВЕРХНЯЯ ПАНЕЛЬ
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -365,13 +436,10 @@ class MainActivity : Activity() {
 
         val menu = makeText("⋮", 27f, Color.LTGRAY)
         menu.gravity = Gravity.CENTER
-
         header.addView(menu, LinearLayout.LayoutParams(dp(35), dp(48)))
+
         content.addView(header)
-
         gap(22)
-
-        // АВАТАР И ИМЯ
 
         val profileTop = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -399,10 +467,7 @@ class MainActivity : Activity() {
             setPadding(dp(15), 0, 0, 0)
         }
 
-        val nameText = makeText(
-            "Загрузка...", 24f, Color.WHITE, true
-        )
-
+        val nameText = makeText("Загрузка...", 24f, Color.WHITE, true)
         val handleText = makeText(
             "@username", 17f, Color.rgb(25, 220, 130), true
         )
@@ -433,10 +498,7 @@ class MainActivity : Activity() {
         )
 
         content.addView(profileTop)
-
         gap(28)
-
-        // КАРТОЧКИ ДЕЙСТВИЙ
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -495,10 +557,7 @@ class MainActivity : Activity() {
         actions.addView(handleCard, p3)
 
         content.addView(actions)
-
         gap(22)
-
-        // ИНФОРМАЦИЯ О ПРОФИЛЕ
 
         val infoCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -563,22 +622,15 @@ class MainActivity : Activity() {
 
         val emailParams = LinearLayout.LayoutParams(-1, -2)
         emailParams.topMargin = dp(10)
-
         infoCard.addView(emailText, emailParams)
 
-        content.addView(
-            infoCard,
-            LinearLayout.LayoutParams(-1, -2)
-        )
-
-        // ЗАГРУЗКА ДАННЫХ FIREBASE
+        content.addView(infoCard)
+        gap(18)
 
         db.child("users").child(uid)
             .addListenerForSingleValueEvent(
                 object : ValueEventListener {
-
                     override fun onDataChange(snapshot: DataSnapshot) {
-
                         nameText.text =
                             snapshot.child("username")
                                 .getValue(String::class.java)
@@ -624,18 +676,7 @@ class MainActivity : Activity() {
                 }
             )
 
-        gap(18)
-
-        val backHome = makeButton("⌂   Вернуться в чаты")
-
-        content.addView(
-            backHome,
-            LinearLayout.LayoutParams(-1, dp(54))
-        )
-
-        backHome.setOnClickListener { showHome() }
-
-        gap(15)
+        addBottomNavigation(2)
     }
 
     // РЕДАКТИРОВАНИЕ СТАТУСА И ИНФОРМАЦИИ
@@ -656,11 +697,7 @@ class MainActivity : Activity() {
         back.setOnClickListener { showProfile() }
 
         addGap(25)
-
-        root.addView(
-            makeText(title, 24f, Color.WHITE, true)
-        )
-
+        root.addView(makeText(title, 24f, Color.WHITE, true))
         addGap(15)
 
         val input = makeInput(hint)
@@ -674,10 +711,7 @@ class MainActivity : Activity() {
         addGap(18)
 
         val save = makeButton("Сохранить")
-        root.addView(
-            save,
-            LinearLayout.LayoutParams(-1, dp(52))
-        )
+        root.addView(save, LinearLayout.LayoutParams(-1, dp(52)))
 
         db.child("users").child(uid).child(field)
             .get()
@@ -722,11 +756,7 @@ class MainActivity : Activity() {
         back.setOnClickListener { showProfile() }
 
         addGap(25)
-
-        root.addView(
-            makeText("Изменить имя", 24f, Color.WHITE, true)
-        )
-
+        root.addView(makeText("Изменить имя", 24f, Color.WHITE, true))
         addGap(15)
 
         val input = makeInput("Новое имя")
@@ -852,7 +882,6 @@ class MainActivity : Activity() {
                             override fun doTransaction(
                                 currentData: MutableData
                             ): Transaction.Result {
-
                                 val existingUid =
                                     currentData.getValue(String::class.java)
 
@@ -872,7 +901,6 @@ class MainActivity : Activity() {
                                 committed: Boolean,
                                 currentData: DataSnapshot?
                             ) {
-
                                 if (error != null) {
                                     save.isEnabled = true
                                     toast(error.message)
@@ -889,7 +917,6 @@ class MainActivity : Activity() {
                                     .child("handle")
                                     .setValue(handle)
                                     .addOnSuccessListener {
-
                                         if (
                                             !oldHandle.isNullOrBlank() &&
                                             oldHandle != handle
@@ -949,7 +976,6 @@ class MainActivity : Activity() {
         addGap(24)
 
         val usernameInput = makeInput("Имя пользователя")
-
         root.addView(
             usernameInput,
             LinearLayout.LayoutParams(-1, dp(52))
@@ -970,7 +996,6 @@ class MainActivity : Activity() {
         addGap()
 
         val passwordInput = makeInput("Пароль", true)
-
         root.addView(
             passwordInput,
             LinearLayout.LayoutParams(-1, dp(52))
@@ -1027,7 +1052,6 @@ class MainActivity : Activity() {
             if (registerMode) {
                 auth.createUserWithEmailAndPassword(email, password)
                     .addOnCompleteListener { task ->
-
                         actionButton.isEnabled = true
 
                         if (task.isSuccessful) {
@@ -1063,7 +1087,6 @@ class MainActivity : Activity() {
             } else {
                 auth.signInWithEmailAndPassword(email, password)
                     .addOnCompleteListener { task ->
-
                         actionButton.isEnabled = true
 
                         if (task.isSuccessful) {
@@ -1082,11 +1105,11 @@ class MainActivity : Activity() {
         }
     }
 
-    // ГЛАВНЫЙ ЭКРАН
+    // ЭКРАН ЧАТОВ
 
     private fun showHome() {
         clearAllListeners()
-        searchQuery = ""
+        selectedSection = 0
         newRoot()
 
         val header = LinearLayout(this).apply {
@@ -1135,59 +1158,64 @@ class MainActivity : Activity() {
         header.addView(logout)
         root.addView(header)
 
-        root.addView(
-            makeText(
-                "Нажми на аватар, чтобы открыть профиль",
-                11f,
-                Color.GRAY
-            )
-        )
-
         addGap(8)
 
-        val search = makeInput("Поиск по имени или @username")
-        root.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
-
-        addGap(12)
+        root.addView(
+            makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true)
+        )
 
         val scroll = ScrollView(this)
 
-        val content = LinearLayout(this).apply {
+        val chatsContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        scroll.addView(content)
+        scroll.addView(chatsContainer)
 
         root.addView(
             scroll,
             LinearLayout.LayoutParams(-1, 0, 1f)
         )
 
-        val chatsTitle = makeText(
-            "МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true
+        loadChats(chatsContainer)
+        addBottomNavigation(0)
+    }
+
+    // ЭКРАН КОНТАКТОВ
+
+    private fun showContacts() {
+        clearAllListeners()
+        selectedSection = 1
+        searchQuery = ""
+        newRoot()
+
+        root.addView(
+            makeText("Контакты", 25f, Color.WHITE, true)
         )
 
-        content.addView(chatsTitle, LinearLayout.LayoutParams(-1, dp(38)))
+        addGap(12)
 
-        val chatsContainer = LinearLayout(this).apply {
+        val search = makeInput("Поиск по имени или @username")
+
+        root.addView(
+            search,
+            LinearLayout.LayoutParams(-1, dp(50))
+        )
+
+        addGap(10)
+
+        val scroll = ScrollView(this)
+
+        val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        content.addView(chatsContainer)
+        scroll.addView(container)
 
-        val usersTitle = makeText(
-            "ПОЛЬЗОВАТЕЛИ", 14f, Color.rgb(25, 220, 130), true
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(-1, 0, 1f)
         )
-
-        val usersTitleParams = LinearLayout.LayoutParams(-1, dp(42))
-        usersTitleParams.topMargin = dp(12)
-        content.addView(usersTitle, usersTitleParams)
-
-        val usersContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-
-        content.addView(usersContainer)
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(
@@ -1198,17 +1226,17 @@ class MainActivity : Activity() {
                 s: CharSequence?, start: Int, before: Int, count: Int
             ) {
                 searchQuery = s?.toString().orEmpty()
-                renderUsers(usersContainer)
+                renderUsers(container)
             }
 
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        loadUsers(usersContainer)
-        loadChats(chatsContainer)
+        loadUsers(container)
+        addBottomNavigation(1)
     }
 
-    // ПОЛЬЗОВАТЕЛИ И ПОИСК
+    // ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ
 
     private fun loadUsers(container: LinearLayout) {
         val myUid = auth.currentUser?.uid ?: return
@@ -1428,7 +1456,13 @@ class MainActivity : Activity() {
             background = android.graphics.drawable.ColorDrawable(
                 Color.TRANSPARENT
             )
-            setOnClickListener { showHome() }
+            setOnClickListener {
+                when (selectedSection) {
+                    1 -> showContacts()
+                    2 -> showProfile()
+                    else -> showHome()
+                }
+            }
         }
 
         header.addView(
