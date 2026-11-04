@@ -1,4 +1,3 @@
-
 package com.stalkergram.app
 
 import android.app.Activity
@@ -30,7 +29,7 @@ class MainActivity : Activity() {
         getSharedPreferences("stalkergram_settings", MODE_PRIVATE)
     }
 
-    // ПАЛИТРА ПДА
+    // PDA COLORS
     private val pdaBackground = Color.rgb(13, 18, 13)
     private val pdaPanel = Color.rgb(25, 34, 22)
     private val pdaPanelLight = Color.rgb(35, 46, 28)
@@ -175,10 +174,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(0, -2, 1f)
         )
 
-        top.addView(
-            makeText("● ONLINE", 10f, pdaGreen, true)
-        )
-
+        top.addView(makeText("● ONLINE", 10f, pdaGreen, true))
         header.addView(top)
 
         val sub = makeText(subtitle, 9f, pdaMuted)
@@ -204,7 +200,7 @@ class MainActivity : Activity() {
         activeChatUid = null
     }
 
-    // АВАТАРКИ
+    // AVATARS
 
     private fun makeAvatar(name: String): TextView {
         val initial = name.trim().firstOrNull()?.toString()
@@ -351,7 +347,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // НИЖНЯЯ ПАНЕЛЬ
+    // BOTTOM NAVIGATION
 
     private fun addBottomNavigation(selected: Int) {
         val navigation = LinearLayout(this).apply {
@@ -421,7 +417,7 @@ class MainActivity : Activity() {
         root.addView(navigation, params)
     }
 
-    // ГЛАВНЫЙ ЭКРАН ПДА
+    // ГЛАВНЫЙ ЭКРАН PDA
 
     private fun showHome() {
         clearAllListeners()
@@ -429,36 +425,77 @@ class MainActivity : Activity() {
         chatSearchQuery = ""
         newRoot()
 
-        root.setPadding(dp(10), dp(8), dp(10), dp(8))
+        root.setPadding(dp(8), dp(7), dp(8), dp(7))
 
-        root.addView(pdaHeader("STALKERGRAM", "PDA TERMINAL // ZONE COMMUNICATION"))
-
-        addGap(8)
-
-        val systemLine = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(9), dp(7), dp(9), dp(7))
-            background = rounded(pdaPanel, 5)
+        // ВЕРХНЯЯ ПАНЕЛЬ УСТРОЙСТВА
+        val device = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(9), dp(12), dp(9))
+            background = rounded(Color.rgb(29, 39, 24), 4)
         }
 
-        systemLine.addView(
-            makeText("СИГНАЛ: СТАБИЛЬНЫЙ", 9f, pdaGreen, true),
+        val topLine = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        topLine.addView(
+            makeText("PDA", 25f, pdaBright, true),
             LinearLayout.LayoutParams(0, -2, 1f)
         )
 
-        systemLine.addView(
-            makeText("ЗОНА / PDA", 9f, pdaMuted)
+        topLine.addView(makeText("● ONLINE", 10f, pdaGreen, true))
+        device.addView(topLine)
+
+        addPdaDivider(device)
+
+        val infoLine = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        infoLine.addView(
+            makeText("STALKERGRAM // ЗОНА", 9f, pdaMuted, true),
+            LinearLayout.LayoutParams(0, -2, 1f)
         )
 
-        root.addView(systemLine)
+        infoLine.addView(
+            makeText(
+                SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()),
+                12f,
+                pdaWarning,
+                true
+            )
+        )
 
-        addGap(8)
+        device.addView(infoLine)
+        root.addView(device)
 
+        addGap(7)
+
+        // НАЗВАНИЕ РАЗДЕЛА
+        val titlePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = rounded(pdaPanelLight, 3)
+        }
+
+        titlePanel.addView(
+            makeText("ЖУРНАЛ СООБЩЕНИЙ", 13f, pdaBright, true),
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
+
+        titlePanel.addView(makeText("ЗОНА / СВЯЗЬ", 8f, pdaWarning))
+        root.addView(titlePanel)
+
+        addGap(7)
+
+        // ПОИСК
         val search = makeInput("Поиск сталкера или переписки...")
         search.inputType = 1
 
-        root.addView(search, LinearLayout.LayoutParams(-1, dp(45)))
+        root.addView(search, LinearLayout.LayoutParams(-1, dp(43)))
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(
@@ -475,10 +512,23 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        addGap(10)
+        addGap(7)
 
-        root.addView(makeText("[ ИСТОРИИ СТАЛКЕРОВ ]", 11f, pdaGreen, true))
-        addGap(5)
+        // ИСТОРИИ
+        val storiesHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        storiesHeader.addView(
+            makeText("[ ИСТОРИИ СТАЛКЕРОВ ]", 10f, pdaGreen, true),
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
+
+        storiesHeader.addView(makeText("● PDA", 8f, pdaMuted))
+        root.addView(storiesHeader)
+
+        addGap(4)
 
         val storiesScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -504,13 +554,13 @@ class MainActivity : Activity() {
         myAvatar.text = "+"
         myAvatar.textSize = 25f
 
-        myStory.addView(myAvatar, LinearLayout.LayoutParams(dp(56), dp(56)))
+        myStory.addView(myAvatar, LinearLayout.LayoutParams(dp(54), dp(54)))
 
-        val myLabel = makeText("МОЯ PDA", 9f, pdaGreen)
+        val myLabel = makeText("МОЯ PDA", 8f, pdaGreen)
         myLabel.gravity = Gravity.CENTER
         myStory.addView(myLabel)
 
-        stories.addView(myStory, LinearLayout.LayoutParams(dp(76), dp(82)))
+        stories.addView(myStory, LinearLayout.LayoutParams(dp(72), dp(78)))
 
         val myUid = auth.currentUser?.uid
 
@@ -537,17 +587,18 @@ class MainActivity : Activity() {
 
                         story.addView(
                             avatar,
-                            LinearLayout.LayoutParams(dp(56), dp(56))
+                            LinearLayout.LayoutParams(dp(54), dp(54))
                         )
 
-                        val label = makeText(name, 9f, pdaText)
+                        val label = makeText(name, 8f, pdaText)
                         label.gravity = Gravity.CENTER
                         label.maxLines = 1
+
                         story.addView(label)
 
                         stories.addView(
                             story,
-                            LinearLayout.LayoutParams(dp(76), dp(82))
+                            LinearLayout.LayoutParams(dp(72), dp(78))
                         )
 
                         loadAvatar(uid, avatar)
@@ -558,41 +609,60 @@ class MainActivity : Activity() {
             }
         )
 
-        root.addView(storiesScroll, LinearLayout.LayoutParams(-1, dp(86)))
+        root.addView(storiesScroll, LinearLayout.LayoutParams(-1, dp(82)))
 
-        addGap(7)
+        addGap(5)
         addPdaDivider()
 
-        root.addView(makeText("[ ВХОДЯЩИЕ ПЕРЕГОВОРЫ ]", 11f, pdaGreen, true))
-        addGap(6)
+        // СПИСОК ПЕРЕГОВОРОВ
+        val chatTitle = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        chatTitle.addView(
+            makeText("[ ВХОДЯЩИЕ ПЕРЕГОВОРЫ ]", 10f, pdaGreen, true),
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
+
+        chatTitle.addView(makeText("CHANNEL 01", 8f, pdaMuted))
+        root.addView(chatTitle)
+
+        addGap(5)
 
         val scroll = ScrollView(this)
 
         val chatsContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(2), 0, dp(4))
         }
 
         scroll.addView(chatsContainer)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        )
 
         loadChats(chatsContainer)
 
+        // КНОПКИ PDA
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(5), 0, dp(3))
         }
 
-        val favorites = makeButton("★ ИЗБРАННОЕ")
+        val favorites = makeButton("★ ЖУРНАЛ")
         actions.addView(
             favorites,
-            LinearLayout.LayoutParams(0, dp(43), 1f)
+            LinearLayout.LayoutParams(0, dp(42), 1f)
         )
         favorites.setOnClickListener { showFavorites() }
 
         val channel = makeButton("+ КАНАЛ")
-        val channelParams = LinearLayout.LayoutParams(0, dp(43), 1f)
-        channelParams.leftMargin = dp(7)
+        val channelParams = LinearLayout.LayoutParams(0, dp(42), 1f)
+        channelParams.leftMargin = dp(6)
         actions.addView(channel, channelParams)
         channel.setOnClickListener { showCreateChannel() }
 
@@ -822,13 +892,8 @@ class MainActivity : Activity() {
                 setColor(pdaBright)
             }
 
-            val badgeParams = LinearLayout.LayoutParams(
-                dp(24),
-                dp(24)
-            )
-
+            val badgeParams = LinearLayout.LayoutParams(dp(24), dp(24))
             badgeParams.topMargin = dp(5)
-
             rightColumn.addView(badge, badgeParams)
         }
 
@@ -836,7 +901,6 @@ class MainActivity : Activity() {
 
         val params = LinearLayout.LayoutParams(-1, -2)
         params.bottomMargin = dp(6)
-
         item.layoutParams = params
 
         return item
@@ -854,7 +918,6 @@ class MainActivity : Activity() {
         addGap(10)
 
         val search = makeInput("Поиск по имени или @username")
-
         root.addView(search, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(8)
 
@@ -872,7 +935,6 @@ class MainActivity : Activity() {
         )
 
         search.addTextChangedListener(object : TextWatcher {
-
             override fun beforeTextChanged(
                 s: CharSequence?, start: Int, count: Int, after: Int
             ) {}
@@ -896,7 +958,6 @@ class MainActivity : Activity() {
 
         db.child("users").addListenerForSingleValueEvent(
             object : ValueEventListener {
-
                 override fun onDataChange(snapshot: DataSnapshot) {
                     users.clear()
 
@@ -953,7 +1014,6 @@ class MainActivity : Activity() {
         }
 
         filtered.forEach { user ->
-
             val display = if (user.handle.isNotBlank()) {
                 "${user.username}  •  @${user.handle}"
             } else {
@@ -993,10 +1053,7 @@ class MainActivity : Activity() {
         val back = makeText("‹", 30f, pdaBright, true)
         back.gravity = Gravity.CENTER
 
-        header.addView(
-            back,
-            LinearLayout.LayoutParams(dp(35), dp(45))
-        )
+        header.addView(back, LinearLayout.LayoutParams(dp(35), dp(45)))
 
         back.setOnClickListener {
             if (selectedSection == 1) showContacts()
@@ -1004,12 +1061,7 @@ class MainActivity : Activity() {
         }
 
         val avatar = makeAvatar(username)
-
-        header.addView(
-            avatar,
-            LinearLayout.LayoutParams(dp(42), dp(42))
-        )
-
+        header.addView(avatar, LinearLayout.LayoutParams(dp(42), dp(42)))
         loadAvatar(otherUid, avatar)
 
         val titleBox = LinearLayout(this).apply {
@@ -1022,11 +1074,7 @@ class MainActivity : Activity() {
         )
         titleBox.addView(makeText("PDA CONNECTION // PRIVATE", 9f, pdaMuted))
 
-        header.addView(
-            titleBox,
-            LinearLayout.LayoutParams(0, -2, 1f)
-        )
-
+        header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
 
         addGap(5)
@@ -1035,10 +1083,7 @@ class MainActivity : Activity() {
             setBackgroundColor(pdaBorder)
         }
 
-        root.addView(
-            divider,
-            LinearLayout.LayoutParams(-1, dp(1))
-        )
+        root.addView(divider, LinearLayout.LayoutParams(-1, dp(1)))
 
         val scroll = ScrollView(this)
 
@@ -1097,9 +1142,7 @@ class MainActivity : Activity() {
             }
         }
 
-        sendButton.setOnClickListener {
-            sendCurrentMessage()
-        }
+        sendButton.setOnClickListener { sendCurrentMessage() }
 
         messageInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
@@ -1114,7 +1157,6 @@ class MainActivity : Activity() {
             otherUid,
 
             onMessages = { messages ->
-
                 messagesContainer.removeAllViews()
 
                 if (messages.isEmpty()) {
@@ -1140,7 +1182,6 @@ class MainActivity : Activity() {
                     }
 
                     sorted.forEach { snapshot ->
-
                         val senderId = snapshot.child("senderId")
                             .getValue(String::class.java) ?: ""
 
@@ -1166,9 +1207,7 @@ class MainActivity : Activity() {
                             )
                         }
 
-                        bubble.addView(
-                            makeText(text, 14f, pdaText)
-                        )
+                        bubble.addView(makeText(text, 14f, pdaText))
 
                         val time = if (timestamp > 0L) {
                             SimpleDateFormat(
@@ -1192,7 +1231,6 @@ class MainActivity : Activity() {
                             if (isMine && status == "read") pdaBright else pdaMuted
                         )
                         timeText.gravity = Gravity.END
-
                         bubble.addView(timeText)
 
                         val row = LinearLayout(this).apply {
@@ -1203,14 +1241,16 @@ class MainActivity : Activity() {
                         row.addView(
                             bubble,
                             LinearLayout.LayoutParams(
-                                minOf(dp(280), (resources.displayMetrics.widthPixels * 0.78f).toInt()),
+                                minOf(
+                                    dp(280),
+                                    (resources.displayMetrics.widthPixels * 0.78f).toInt()
+                                ),
                                 -2
                             )
                         )
 
                         val params = LinearLayout.LayoutParams(-1, -2)
                         params.bottomMargin = dp(7)
-
                         messagesContainer.addView(row, params)
                     }
 
@@ -1257,7 +1297,6 @@ class MainActivity : Activity() {
         )
 
         content.addView(pdaHeader("ЛИЧНОЕ ДЕЛО", "PDA USER PROFILE"))
-
         addGap(10)
 
         val top = LinearLayout(this).apply {
@@ -1268,11 +1307,7 @@ class MainActivity : Activity() {
         }
 
         val avatar = makeAvatar("Я")
-
-        top.addView(
-            avatar,
-            LinearLayout.LayoutParams(dp(90), dp(90))
-        )
+        top.addView(avatar, LinearLayout.LayoutParams(dp(90), dp(90)))
 
         loadAvatar(uid, avatar)
         avatar.setOnClickListener { chooseProfilePhoto() }
@@ -1296,21 +1331,18 @@ class MainActivity : Activity() {
         addGap(8)
 
         val edit = makeButton("✎  ИЗМЕНИТЬ ИМЯ")
-
         content.addView(edit, LinearLayout.LayoutParams(-1, dp(46)))
         edit.setOnClickListener { showEditName() }
 
         addGap(8)
 
         val aboutCard = settingsCard()
-
         aboutCard.addView(
             makeText("[ ИНФОРМАЦИЯ О СТАЛКЕРЕ ]", 11f, pdaGreen, true)
         )
 
         val about = makeText("Расскажи немного о себе", 12f, pdaText)
         about.setPadding(0, dp(10), 0, 0)
-
         aboutCard.addView(about)
 
         about.setOnClickListener {
@@ -1322,23 +1354,13 @@ class MainActivity : Activity() {
         addGap(8)
 
         val handleButton = makeButton("ИЗМЕНИТЬ USERNAME")
-
-        content.addView(
-            handleButton,
-            LinearLayout.LayoutParams(-1, dp(46))
-        )
-
+        content.addView(handleButton, LinearLayout.LayoutParams(-1, dp(46)))
         handleButton.setOnClickListener { showEditHandle() }
 
         addGap(7)
 
         val statusButton = makeButton("ИЗМЕНИТЬ СТАТУС")
-
-        content.addView(
-            statusButton,
-            LinearLayout.LayoutParams(-1, dp(46))
-        )
-
+        content.addView(statusButton, LinearLayout.LayoutParams(-1, dp(46)))
         statusButton.setOnClickListener {
             showEditField("status", "Статус", "Твой статус...", 60)
         }
@@ -1346,11 +1368,7 @@ class MainActivity : Activity() {
         addGap(7)
 
         val logout = makeButton("ВЫЙТИ ИЗ АККАУНТА")
-
-        content.addView(
-            logout,
-            LinearLayout.LayoutParams(-1, dp(46))
-        )
+        content.addView(logout, LinearLayout.LayoutParams(-1, dp(46)))
 
         logout.setOnClickListener {
             AlertDialog.Builder(this)
@@ -1366,7 +1384,6 @@ class MainActivity : Activity() {
 
         db.child("users").child(uid).addListenerForSingleValueEvent(
             object : ValueEventListener {
-
                 override fun onDataChange(snapshot: DataSnapshot) {
                     name.text = snapshot.child("username")
                         .getValue(String::class.java) ?: "Сталкер"
@@ -1428,11 +1445,9 @@ class MainActivity : Activity() {
         input.maxLines = 5
 
         root.addView(input, LinearLayout.LayoutParams(-1, dp(100)))
-
         addGap(15)
 
         val save = makeButton("СОХРАНИТЬ")
-
         root.addView(save, LinearLayout.LayoutParams(-1, dp(49)))
 
         db.child("users").child(uid).child(field).get()
@@ -1470,7 +1485,6 @@ class MainActivity : Activity() {
 
         val back = makeText("‹  НАЗАД", 13f, pdaBright)
         root.addView(back)
-
         back.setOnClickListener { showProfile() }
 
         addGap(20)
@@ -1478,13 +1492,11 @@ class MainActivity : Activity() {
         addGap(15)
 
         val input = makeInput("Новое имя")
-
         root.addView(input, LinearLayout.LayoutParams(-1, dp(49)))
 
         addGap(15)
 
         val save = makeButton("СОХРАНИТЬ ИМЯ")
-
         root.addView(save, LinearLayout.LayoutParams(-1, dp(49)))
 
         db.child("users").child(uid).child("username").get()
@@ -1522,7 +1534,6 @@ class MainActivity : Activity() {
 
         val back = makeText("‹  НАЗАД", 13f, pdaBright)
         root.addView(back)
-
         back.setOnClickListener { showProfile() }
 
         addGap(20)
@@ -1530,13 +1541,11 @@ class MainActivity : Activity() {
         addGap(12)
 
         val input = makeInput("@username")
-
         root.addView(input, LinearLayout.LayoutParams(-1, dp(49)))
 
         addGap(15)
 
         val save = makeButton("СОХРАНИТЬ USERNAME")
-
         root.addView(save, LinearLayout.LayoutParams(-1, dp(49)))
 
         db.child("users").child(uid).child("handle").get()
@@ -1568,13 +1577,10 @@ class MainActivity : Activity() {
 
                     db.child("usernames").child(handle).runTransaction(
                         object : Transaction.Handler {
-
                             override fun doTransaction(
                                 currentData: MutableData
                             ): Transaction.Result {
-
-                                val existing = currentData
-                                    .getValue(String::class.java)
+                                val existing = currentData.getValue(String::class.java)
 
                                 if (existing != null && existing != uid) {
                                     return Transaction.abort()
@@ -1589,7 +1595,6 @@ class MainActivity : Activity() {
                                 committed: Boolean,
                                 currentData: DataSnapshot?
                             ) {
-
                                 if (error != null || !committed) {
                                     save.isEnabled = true
                                     toast(error?.message ?: "Username уже занят")
@@ -1599,7 +1604,6 @@ class MainActivity : Activity() {
                                 db.child("users").child(uid).child("handle")
                                     .setValue(handle)
                                     .addOnSuccessListener {
-
                                         if (!oldHandle.isNullOrBlank() &&
                                             oldHandle != handle
                                         ) {
@@ -1643,7 +1647,6 @@ class MainActivity : Activity() {
         }
 
         val iconView = makeText(icon, 19f, pdaGreen)
-
         row.addView(iconView, LinearLayout.LayoutParams(dp(38), -2))
 
         val texts = LinearLayout(this).apply {
@@ -1660,7 +1663,12 @@ class MainActivity : Activity() {
     }
 
     private fun settingsHeader(title: String) {
-        root.addView(pdaHeader(title.uppercase(Locale.getDefault()), "PDA SYSTEM SETTINGS"))
+        root.addView(
+            pdaHeader(
+                title.uppercase(Locale.getDefault()),
+                "PDA SYSTEM SETTINGS"
+            )
+        )
     }
 
     private fun showSettings() {
@@ -1674,18 +1682,15 @@ class MainActivity : Activity() {
         val uid = auth.currentUser?.uid ?: return
 
         val card = settingsCard()
-
         val name = makeText("ЗАГРУЗКА...", 15f, pdaBright, true)
         val email = makeText("", 10f, pdaMuted)
 
         card.addView(name)
         card.addView(email)
-
         root.addView(card)
 
         db.child("users").child(uid).addListenerForSingleValueEvent(
             object : ValueEventListener {
-
                 override fun onDataChange(snapshot: DataSnapshot) {
                     name.text = snapshot.child("username")
                         .getValue(String::class.java) ?: "Сталкер"
@@ -1701,7 +1706,6 @@ class MainActivity : Activity() {
         addGap(10)
 
         val scroll = ScrollView(this)
-
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -1709,11 +1713,7 @@ class MainActivity : Activity() {
         scroll.addView(list)
 
         list.addView(
-            settingsRow(
-                "◉",
-                "Уведомления",
-                "Настройки уведомлений"
-            ) {
+            settingsRow("◉", "Уведомления", "Настройки уведомлений") {
                 showSimpleSetting(
                     "Уведомления",
                     "Уведомления приложения можно настроить в параметрах Android."
@@ -1724,11 +1724,7 @@ class MainActivity : Activity() {
         addGap(6)
 
         list.addView(
-            settingsRow(
-                "▣",
-                "Конфиденциальность",
-                "Параметры приватности"
-            ) {
+            settingsRow("▣", "Конфиденциальность", "Параметры приватности") {
                 showSimpleSetting(
                     "Конфиденциальность",
                     "Настройки приватности будут расширены в следующих версиях."
@@ -1739,11 +1735,7 @@ class MainActivity : Activity() {
         addGap(6)
 
         list.addView(
-            settingsRow(
-                "◈",
-                "Оформление",
-                "Тема ПДА"
-            ) {
+            settingsRow("◈", "Оформление", "Тема ПДА") {
                 prefs.edit().putString("theme", "PDA").apply()
                 toast("Тема ПДА активна")
             }
@@ -1752,16 +1744,8 @@ class MainActivity : Activity() {
         addGap(6)
 
         list.addView(
-            settingsRow(
-                "◎",
-                "Язык",
-                "Русский"
-            ) {
-                val languages = arrayOf(
-                    "Русский",
-                    "Українська",
-                    "English"
-                )
+            settingsRow("◎", "Язык", "Русский") {
+                val languages = arrayOf("Русский", "Українська", "English")
 
                 AlertDialog.Builder(this)
                     .setTitle("Выбери язык")
@@ -1779,11 +1763,7 @@ class MainActivity : Activity() {
         addGap(6)
 
         list.addView(
-            settingsRow(
-                "ⓘ",
-                "О приложении",
-                "StalkerGram • Версия 1.0.0"
-            ) {
+            settingsRow("ⓘ", "О приложении", "StalkerGram • Версия 1.0.0") {
                 showSimpleSetting("StalkerGram", "Версия 1.0.0")
             }
         )
@@ -1810,13 +1790,7 @@ class MainActivity : Activity() {
         clearAllListeners()
         newRoot()
 
-        val title = makeText(
-            "STALKERGRAM",
-            27f,
-            pdaBright,
-            true
-        )
-
+        val title = makeText("STALKERGRAM", 27f, pdaBright, true)
         title.gravity = Gravity.CENTER
 
         root.addView(title, LinearLayout.LayoutParams(-1, dp(70)))
@@ -1884,9 +1858,7 @@ class MainActivity : Activity() {
             isAllCaps = false
             typeface = Typeface.MONOSPACE
             setTextColor(pdaGreen)
-            background = android.graphics.drawable.ColorDrawable(
-                Color.TRANSPARENT
-            )
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
         }
 
         root.addView(
@@ -1909,10 +1881,8 @@ class MainActivity : Activity() {
             action.isEnabled = false
 
             if (registerMode) {
-
                 auth.createUserWithEmailAndPassword(email, password)
                     .addOnCompleteListener { task ->
-
                         action.isEnabled = true
 
                         if (task.isSuccessful) {
@@ -1931,33 +1901,23 @@ class MainActivity : Activity() {
                                     showHome()
                                 }
                                 .addOnFailureListener {
-                                    toast(
-                                        it.message
-                                            ?: "Ошибка сохранения профиля"
-                                    )
+                                    toast(it.message ?: "Ошибка сохранения профиля")
                                 }
 
                         } else {
-                            toast(
-                                task.exception?.message
-                                    ?: "Ошибка регистрации"
-                            )
+                            toast(task.exception?.message ?: "Ошибка регистрации")
                         }
                     }
 
             } else {
-
                 auth.signInWithEmailAndPassword(email, password)
                     .addOnCompleteListener { task ->
-
                         action.isEnabled = true
 
                         if (task.isSuccessful) {
                             showHome()
                         } else {
-                            toast(
-                                task.exception?.message ?: "Ошибка входа"
-                            )
+                            toast(task.exception?.message ?: "Ошибка входа")
                         }
                     }
             }
