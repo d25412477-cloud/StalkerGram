@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="zone_black">#0C0F0D</color>
+    <color name="zone_dark">#151A16</color>
+    <color name="zone_green">#82DC87</color>
+    <color name="zone_green_dark">#315C38</color>
+    <color name="zone_white">#FFFFFF</color>
+    <color name="zone_gray">#858B86</color>
+</resources>
