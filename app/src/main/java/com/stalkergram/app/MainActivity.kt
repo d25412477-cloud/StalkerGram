@@ -51,11 +51,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (auth.currentUser == null) {
-            showAuth(false)
-        } else {
-            showHome()
-        }
+        if (auth.currentUser == null) showAuth(false)
+        else showHome()
     }
 
     private fun dp(value: Int): Int =
@@ -98,9 +95,9 @@ class MainActivity : Activity() {
     ): EditText {
         return EditText(this).apply {
             hint = hintText
-            setHintTextColor(Color.GRAY)
+            setHintTextColor(Color.rgb(130, 140, 150))
             setTextColor(Color.WHITE)
-            textSize = 16f
+            textSize = 15f
             setPadding(dp(14), dp(10), dp(14), dp(10))
             background = rounded(Color.rgb(29, 38, 49), 12)
             if (password) inputType = 129
@@ -477,9 +474,7 @@ class MainActivity : Activity() {
 
         val editButton = makeButton("✎  Изменить профиль")
         content.addView(editButton, LinearLayout.LayoutParams(-1, dp(50)))
-        editButton.setOnClickListener {
-            showEditName()
-        }
+        editButton.setOnClickListener { showEditName() }
 
         gap(16)
 
@@ -501,33 +496,28 @@ class MainActivity : Activity() {
         val emailText = makeText("Загрузка почты...", 14f, Color.LTGRAY)
         accountCard.addView(emailText)
         emailText.setPadding(0, dp(12), 0, 0)
-
         content.addView(accountCard)
 
         gap(12)
 
-        content.addView(
-            settingsRow("⚙", "Настройки", "Уведомления, тема, приватность") {
-                showSettings()
-            }
-        )
+        content.addView(settingsRow("⚙", "Настройки", "Уведомления, тема, приватность") {
+            showSettings()
+        })
 
         gap(10)
 
-        content.addView(
-            settingsRow("↪", "Выйти из аккаунта", "Завершить текущий сеанс") {
-                AlertDialog.Builder(this)
-                    .setTitle("Выйти из аккаунта?")
-                    .setMessage("Ты действительно хочешь выйти?")
-                    .setNegativeButton("Отмена", null)
-                    .setPositiveButton("Выйти") { _, _ ->
-                        clearAllListeners()
-                        auth.signOut()
-                        showAuth(false)
-                    }
-                    .show()
-            }
-        )
+        content.addView(settingsRow("↪", "Выйти из аккаунта", "Завершить текущий сеанс") {
+            AlertDialog.Builder(this)
+                .setTitle("Выйти из аккаунта?")
+                .setMessage("Ты действительно хочешь выйти?")
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Выйти") { _, _ ->
+                    clearAllListeners()
+                    auth.signOut()
+                    showAuth(false)
+                }
+                .show()
+        })
 
         db.child("users").child(uid)
             .addListenerForSingleValueEvent(object : ValueEventListener {
@@ -1314,13 +1304,9 @@ class MainActivity : Activity() {
         root.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
 
         search.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(
-                s: CharSequence?, start: Int, count: Int, after: Int
-            ) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
 
-            override fun onTextChanged(
-                s: CharSequence?, start: Int, before: Int, count: Int
-            ) {
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 chatSearchQuery = s?.toString().orEmpty()
                 renderChats?.invoke()
             }
@@ -1331,14 +1317,8 @@ class MainActivity : Activity() {
         addGap(10)
 
         val newMessageButton = makeButton("＋  Новое сообщение")
-        root.addView(
-            newMessageButton,
-            LinearLayout.LayoutParams(-1, dp(48))
-        )
-
-        newMessageButton.setOnClickListener {
-            showContacts()
-        }
+        root.addView(newMessageButton, LinearLayout.LayoutParams(-1, dp(48)))
+        newMessageButton.setOnClickListener { showContacts() }
 
         addGap(16)
         root.addView(makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true))
@@ -1458,66 +1438,50 @@ class MainActivity : Activity() {
         }
     }
 
-    // СПИСОК ЧАТОВ И ПОИСК
+    // СПИСОК ЧАТОВ
 
     private fun loadChats(container: LinearLayout) {
         renderChats = null
 
         chatListListener = ChatListManager.listenChats(
             callback = { previews ->
-
                 val drawChats: () -> Unit = {
                     container.removeAllViews()
 
-                    val query = chatSearchQuery
-                        .trim()
+                    val query = chatSearchQuery.trim()
                         .removePrefix("@")
                         .lowercase(Locale.getDefault())
 
                     val filtered = previews.filter { preview ->
-                        preview.username.lowercase(Locale.getDefault())
-                            .contains(query) ||
-                            preview.uid.lowercase(Locale.getDefault())
-                                .contains(query)
+                        preview.username.lowercase(Locale.getDefault()).contains(query) ||
+                            preview.uid.lowercase(Locale.getDefault()).contains(query)
                     }
 
                     if (filtered.isEmpty()) {
-                        val message = if (query.isBlank()) {
-                            "Здесь пока нет чатов"
-                        } else {
-                            "Чаты не найдены"
-                        }
-
-                        val empty = makeText(message, 14f, Color.GRAY)
-                        empty.gravity = Gravity.CENTER
-                        container.addView(
-                            empty,
-                            LinearLayout.LayoutParams(-1, dp(75))
+                        val empty = makeText(
+                            if (query.isBlank()) "Здесь пока нет чатов" else "Чаты не найдены",
+                            14f, Color.GRAY
                         )
+                        empty.gravity = Gravity.CENTER
+                        container.addView(empty, LinearLayout.LayoutParams(-1, dp(75)))
                     } else {
-                        filtered.sortedByDescending { it.timestamp }
-                            .forEach { preview ->
-                                val time = if (preview.timestamp > 0L) {
-                                    SimpleDateFormat(
-                                        "HH:mm",
-                                        Locale.getDefault()
-                                    ).format(Date(preview.timestamp))
-                                } else ""
+                        filtered.sortedByDescending { it.timestamp }.forEach { preview ->
+                            val time = if (preview.timestamp > 0L) {
+                                SimpleDateFormat("HH:mm", Locale.getDefault())
+                                    .format(Date(preview.timestamp))
+                            } else ""
 
-                                val message = preview.lastMessage
-                                    .ifBlank { "Нет сообщений" }
-
-                                container.addView(
-                                    makeListItem(
-                                        preview.uid,
-                                        preview.username,
-                                        message,
-                                        time
-                                    ) {
-                                        openChat(preview.uid, preview.username)
-                                    }
-                                )
-                            }
+                            container.addView(
+                                makeListItem(
+                                    preview.uid,
+                                    preview.username,
+                                    preview.lastMessage.ifBlank { "Нет сообщений" },
+                                    time
+                                ) {
+                                    openChat(preview.uid, preview.username)
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -1564,73 +1528,96 @@ class MainActivity : Activity() {
         val params = LinearLayout.LayoutParams(-1, -2)
         params.bottomMargin = dp(7)
         item.layoutParams = params
-
         return item
     }
 
-    // ОТКРЫТИЕ ЧАТА
+    // МИНИМАЛИСТИЧНЫЙ ЭКРАН ПЕРЕПИСКИ №3
 
     private fun openChat(otherUid: String, username: String) {
         clearAllListeners()
         activeChatUid = otherUid
         newRoot()
 
+        root.setPadding(dp(10), dp(5), dp(10), dp(8))
+        root.setBackgroundColor(Color.rgb(12, 16, 20))
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(3), dp(2), dp(10))
         }
 
-        val backButton = Button(this).apply {
-            text = "‹"
-            textSize = 30f
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
-            setOnClickListener {
-                when (selectedSection) {
-                    1 -> showContacts()
-                    2 -> showProfile()
-                    else -> showHome()
-                }
+        val back = makeText("‹", 35f, Color.WHITE)
+        back.gravity = Gravity.CENTER
+        header.addView(back, LinearLayout.LayoutParams(dp(38), dp(48)))
+
+        back.setOnClickListener {
+            when (selectedSection) {
+                1 -> showContacts()
+                2 -> showProfile()
+                else -> showHome()
             }
         }
-
-        header.addView(backButton, LinearLayout.LayoutParams(dp(48), dp(48)))
 
         val avatar = makeAvatar(username)
         header.addView(avatar, LinearLayout.LayoutParams(dp(42), dp(42)))
         loadAvatar(otherUid, avatar)
 
-        val title = makeText(username, 18f, Color.WHITE, true)
-        title.setPadding(dp(10), 0, 0, 0)
-        header.addView(title, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val userInfo = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), 0, 0, 0)
+        }
 
+        userInfo.addView(makeText(username, 16f, Color.WHITE, true))
+        userInfo.addView(makeText("Личная переписка", 11f, Color.rgb(135, 145, 150)))
+
+        header.addView(userInfo, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
-        addGap(8)
 
-        val scroll = ScrollView(this)
+        val divider = View(this).apply {
+            setBackgroundColor(Color.rgb(35, 43, 48))
+        }
+        root.addView(divider, LinearLayout.LayoutParams(-1, dp(1)))
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+        }
+
         val messagesContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(4), dp(8), dp(4), dp(8))
+            setPadding(dp(4), dp(12), dp(4), dp(12))
         }
-        scroll.addView(messagesContainer)
 
+        scroll.addView(messagesContainer)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, dp(2))
         }
 
-        val messageInput = makeInput("Сообщение")
+        val messageInput = makeInput("Сообщение...")
         messageInput.maxLines = 4
+        messageInput.minLines = 1
         messageInput.inputType = 1
         messageInput.imeOptions = EditorInfo.IME_ACTION_SEND
+        messageInput.background = rounded(Color.rgb(29, 36, 42), 22)
 
-        bottom.addView(messageInput, LinearLayout.LayoutParams(0, dp(52), 1f))
+        bottom.addView(
+            messageInput,
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
 
-        val sendButton = makeButton("➤")
-        val sendParams = LinearLayout.LayoutParams(dp(58), dp(52))
+        val sendButton = TextView(this).apply {
+            text = "➤"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = rounded(Color.rgb(25, 155, 95), 50)
+        }
+
+        val sendParams = LinearLayout.LayoutParams(dp(46), dp(46))
         sendParams.leftMargin = dp(8)
         bottom.addView(sendButton, sendParams)
         root.addView(bottom)
@@ -1640,10 +1627,15 @@ class MainActivity : Activity() {
             if (text.isBlank()) return
 
             sendButton.isEnabled = false
+
             ChatManager.sendMessage(otherUid, text) { success, result ->
                 sendButton.isEnabled = true
-                if (success) messageInput.text.clear()
-                else toast(result)
+
+                if (success) {
+                    messageInput.text.clear()
+                } else {
+                    toast(result)
+                }
             }
         }
 
@@ -1653,7 +1645,9 @@ class MainActivity : Activity() {
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendCurrentMessage()
                 true
-            } else false
+            } else {
+                false
+            }
         }
 
         messagesListener = ChatManager.listenMessages(
@@ -1662,11 +1656,15 @@ class MainActivity : Activity() {
                 messagesContainer.removeAllViews()
 
                 if (messages.isEmpty()) {
-                    val empty = makeText("Начни переписку 💚", 14f, Color.GRAY)
+                    val empty = makeText(
+                        "Пока нет сообщений.\nНапиши первым 💚",
+                        14f,
+                        Color.rgb(130, 140, 145)
+                    )
                     empty.gravity = Gravity.CENTER
                     messagesContainer.addView(
                         empty,
-                        LinearLayout.LayoutParams(-1, dp(60))
+                        LinearLayout.LayoutParams(-1, dp(100))
                     )
                 } else {
                     val myUid = auth.currentUser?.uid ?: ""
@@ -1689,42 +1687,50 @@ class MainActivity : Activity() {
 
                         val bubble = LinearLayout(this).apply {
                             orientation = LinearLayout.VERTICAL
-                            setPadding(dp(12), dp(8), dp(12), dp(6))
+                            setPadding(dp(13), dp(9), dp(13), dp(7))
                             background = rounded(
-                                if (isMine) Color.rgb(20, 145, 90)
-                                else Color.rgb(36, 46, 59),
-                                14
+                                if (isMine) Color.rgb(24, 139, 88)
+                                else Color.rgb(34, 42, 48),
+                                17
                             )
                         }
 
-                        bubble.addView(makeText(text, 16f, Color.WHITE))
+                        bubble.addView(makeText(text, 15f, Color.WHITE))
+
+                        val time = if (timestamp > 0L) {
+                            SimpleDateFormat("HH:mm", Locale.getDefault())
+                                .format(Date(timestamp))
+                        } else ""
 
                         val timeText = makeText(
-                            if (timestamp > 0L) {
-                                SimpleDateFormat(
-                                    "HH:mm",
-                                    Locale.getDefault()
-                                ).format(Date(timestamp))
-                            } else "",
-                            10f, Color.LTGRAY
+                            time,
+                            10f,
+                            if (isMine) Color.rgb(205, 235, 220)
+                            else Color.rgb(155, 165, 170)
                         )
-
                         timeText.gravity = Gravity.END
                         bubble.addView(timeText)
 
                         val row = LinearLayout(this).apply {
                             orientation = LinearLayout.HORIZONTAL
                             gravity = if (isMine) Gravity.END else Gravity.START
+                            setPadding(dp(2), dp(2), dp(2), dp(2))
                         }
 
-                        row.addView(bubble, LinearLayout.LayoutParams(dp(270), -2))
+                        val bubbleParams = LinearLayout.LayoutParams(
+                            dp(275),
+                            -2
+                        )
+                        row.addView(bubble, bubbleParams)
 
                         val rowParams = LinearLayout.LayoutParams(-1, -2)
-                        rowParams.bottomMargin = dp(7)
+                        rowParams.bottomMargin = dp(5)
                         messagesContainer.addView(row, rowParams)
                     }
 
-                    scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+                    scroll.post {
+                        scroll.fullScroll(View.FOCUS_DOWN)
+                    }
                 }
             },
             onError = { message -> toast(message) }
