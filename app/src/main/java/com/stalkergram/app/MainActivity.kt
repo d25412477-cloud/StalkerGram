@@ -36,6 +36,8 @@ class MainActivity : Activity() {
     private var messagesListener: ValueEventListener? = null
     private var activeChatUid: String? = null
     private var searchQuery = ""
+    private var chatSearchQuery = ""
+    private var renderChats: (() -> Unit)? = null
     private var selectedSection = 0
 
     private val PICK_IMAGE_REQUEST = 1001
@@ -128,6 +130,8 @@ class MainActivity : Activity() {
             ChatListManager.removeListener(it)
         }
         chatListListener = null
+
+        renderChats = null
 
         val uid = activeChatUid
         val listener = messagesListener
@@ -612,9 +616,6 @@ class MainActivity : Activity() {
         return row
     }
 
-    // ИЗМЕНЕНО: теперь можно указать, куда ведёт кнопка «Назад».
-    // По умолчанию подразделы возвращаются в главное меню настроек.
-
     private fun settingsHeader(
         title: String,
         onBack: () -> Unit = { showSettings() }
@@ -643,7 +644,6 @@ class MainActivity : Activity() {
         clearAllListeners()
         newRoot()
 
-        // ИЗМЕНЕНО: из главных настроек возвращаемся в профиль.
         settingsHeader("Настройки") {
             showProfile()
         }
@@ -868,7 +868,6 @@ class MainActivity : Activity() {
         addGap(12)
 
         val current = prefs.getString("theme", "Тёмная") ?: "Тёмная"
-
         val options = arrayOf("Тёмная", "Светлая", "Системная")
 
         val radio = RadioGroup(this).apply {
@@ -1279,11 +1278,12 @@ class MainActivity : Activity() {
         }
     }
 
-    // ЧАТЫ
+    // ГЛАВНЫЙ ЭКРАН ЧАТОВ
 
     private fun showHome() {
         clearAllListeners()
         selectedSection = 0
+        chatSearchQuery = ""
         newRoot()
 
         val header = LinearLayout(this).apply {
@@ -1308,9 +1308,50 @@ class MainActivity : Activity() {
         settings.setOnClickListener { showSettings() }
 
         root.addView(header)
-        addGap(8)
+        addGap(10)
 
-        root.addView(makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true))
+        // ПОИСК ПО ЧАТАМ
+
+        val search = makeInput("Поиск по чатам или @username")
+        search.inputType = 1
+        root.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(
+                s: CharSequence?, start: Int, count: Int, after: Int
+            ) {}
+
+            override fun onTextChanged(
+                s: CharSequence?, start: Int, before: Int, count: Int
+            ) {
+                chatSearchQuery = s?.toString().orEmpty()
+                renderChats?.invoke()
+            }
+
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        addGap(10)
+
+        // КНОПКА НОВОГО СООБЩЕНИЯ
+
+        val newMessageButton = makeButton("＋  Новое сообщение")
+        root.addView(
+            newMessageButton,
+            LinearLayout.LayoutParams(-1, dp(48))
+        )
+
+        newMessageButton.setOnClickListener {
+            showContacts()
+        }
+
+        addGap(16)
+
+        root.addView(
+            makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true)
+        )
+
+        addGap(8)
 
         val scroll = ScrollView(this)
         val chatsContainer = LinearLayout(this).apply {
@@ -1424,32 +1465,74 @@ class MainActivity : Activity() {
         }
     }
 
-    // СПИСОК ЧАТОВ
+    // СПИСОК ЧАТОВ С ПОИСКОМ
 
     private fun loadChats(container: LinearLayout) {
+        renderChats = null
+
         chatListListener = ChatListManager.listenChats(
             callback = { previews ->
-                container.removeAllViews()
 
-                if (previews.isEmpty()) {
-                    container.addView(makeText("Здесь пока нет чатов", 14f, Color.GRAY))
-                    return@listenChats
-                }
+                // Сохраняем функцию отрисовки именно для полученного списка.
+                // При вводе текста Firebase повторно не запрашивается.
 
-                previews.forEach { preview ->
-                    val time = if (preview.timestamp > 0L) {
-                        SimpleDateFormat("HH:mm", Locale.getDefault())
-                            .format(Date(preview.timestamp))
-                    } else ""
+                renderChats = {
+                    container.removeAllViews()
 
-                    val message = preview.lastMessage.ifBlank { "Нет сообщений" }
+                    val query = chatSearchQuery
+                        .trim()
+                        .removePrefix("@")
+                        .lowercase(Locale.getDefault())
 
-                    container.addView(
-                        makeListItem(preview.uid, preview.username, message, time) {
-                            openChat(preview.uid, preview.username)
+                    val filtered = previews.filter { preview ->
+                        preview.username.lowercase(Locale.getDefault())
+                            .contains(query) ||
+                            preview.uid.lowercase(Locale.getDefault())
+                                .contains(query)
+                    }
+
+                    if (filtered.isEmpty()) {
+                        val message = if (query.isBlank()) {
+                            "Здесь пока нет чатов"
+                        } else {
+                            "Чаты не найдены"
                         }
-                    )
+
+                        val empty = makeText(message, 14f, Color.GRAY)
+                        empty.gravity = Gravity.CENTER
+                        container.addView(
+                            empty,
+                            LinearLayout.LayoutParams(-1, dp(75))
+                        )
+                        return@let
+                    }
+
+                    filtered.sortedByDescending { it.timestamp }
+                        .forEach { preview ->
+                            val time = if (preview.timestamp > 0L) {
+                                SimpleDateFormat(
+                                    "HH:mm",
+                                    Locale.getDefault()
+                                ).format(Date(preview.timestamp))
+                            } else ""
+
+                            val message = preview.lastMessage
+                                .ifBlank { "Нет сообщений" }
+
+                            container.addView(
+                                makeListItem(
+                                    preview.uid,
+                                    preview.username,
+                                    message,
+                                    time
+                                ) {
+                                    openChat(preview.uid, preview.username)
+                                }
+                            )
+                        }
                 }
+
+                renderChats?.invoke()
             },
             onError = { message -> toast(message) }
         )
@@ -1591,7 +1674,10 @@ class MainActivity : Activity() {
                 if (messages.isEmpty()) {
                     val empty = makeText("Начни переписку 💚", 14f, Color.GRAY)
                     empty.gravity = Gravity.CENTER
-                    messagesContainer.addView(empty, LinearLayout.LayoutParams(-1, dp(60)))
+                    messagesContainer.addView(
+                        empty,
+                        LinearLayout.LayoutParams(-1, dp(60))
+                    )
                     return@listenMessages
                 }
 
@@ -1627,8 +1713,10 @@ class MainActivity : Activity() {
 
                     val timeText = makeText(
                         if (timestamp > 0L) {
-                            SimpleDateFormat("HH:mm", Locale.getDefault())
-                                .format(Date(timestamp))
+                            SimpleDateFormat(
+                                "HH:mm",
+                                Locale.getDefault()
+                            ).format(Date(timestamp))
                         } else "",
                         10f, Color.LTGRAY
                     )
