@@ -20,32 +20,24 @@ class MainActivity : Activity() {
     private val gray = Color.rgb(133, 139, 134)
 
     private val db by lazy { FirebaseConfig.database.reference }
-    private val currentUid get() = FirebaseAuth.getInstance().currentUser?.uid
+    private val uid get() = FirebaseAuth.getInstance().currentUser?.uid
 
     private lateinit var root: LinearLayout
     private var activeRef: DatabaseReference? = null
     private var activeListener: ValueEventListener? = null
-    private var allUsers = mutableListOf<DataSnapshot>()
+    private var usersListener: ValueEventListener? = null
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        if (AuthManager.isLoggedIn()) showHome()
-        else showLogin()
-    }
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun clearListener() {
-        if (activeRef != null && activeListener != null) {
-            activeRef!!.removeEventListener(activeListener!!)
+        activeRef?.let { ref ->
+            activeListener?.let { ref.removeEventListener(it) }
         }
         activeRef = null
         activeListener = null
     }
 
-    private fun setupScreen(title: String, subtitle: String) {
+    private fun setup(title: String, subtitle: String) {
         clearListener()
 
         root = LinearLayout(this)
@@ -66,7 +58,7 @@ class MainActivity : Activity() {
         heading.textSize = 21f
         heading.setTextColor(white)
         heading.gravity = Gravity.CENTER
-        heading.setPadding(0, dp(20), 0, dp(5))
+        heading.setPadding(0, dp(16), 0, dp(5))
         root.addView(heading)
 
         val info = TextView(this)
@@ -74,63 +66,93 @@ class MainActivity : Activity() {
         info.textSize = 13f
         info.setTextColor(gray)
         info.gravity = Gravity.CENTER
-        info.setPadding(0, 0, 0, dp(15))
+        info.setPadding(0, 0, 0, dp(12))
         root.addView(info)
     }
 
-    private fun addField(hint: String, password: Boolean = false): EditText {
-        val field = EditText(this)
-        field.hint = hint
-        field.setHintTextColor(gray)
-        field.setTextColor(white)
-        field.textSize = 16f
-        field.setSingleLine(true)
-        field.setPadding(dp(14), dp(10), dp(14), dp(10))
-        field.setBackgroundColor(panel)
+    private fun field(hint: String, password: Boolean = false): EditText {
+        val e = EditText(this)
+        e.hint = hint
+        e.setHintTextColor(gray)
+        e.setTextColor(white)
+        e.textSize = 16f
+        e.setSingleLine(true)
+        e.setPadding(dp(14), dp(10), dp(14), dp(10))
+        e.setBackgroundColor(panel)
+        if (password) e.inputType = 129
 
-        if (password) field.inputType = 129
-
-        val params = LinearLayout.LayoutParams(
+        val p = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(54)
         )
-        params.setMargins(0, dp(6), 0, dp(6))
-        root.addView(field, params)
-        return field
+        p.setMargins(0, dp(6), 0, dp(6))
+        root.addView(e, p)
+        return e
     }
 
-    private fun addButton(text: String, action: () -> Unit) {
-        val button = Button(this)
-        button.text = text
-        button.setTextColor(bg)
-        button.textSize = 14f
-        button.setBackgroundColor(green)
-        button.setOnClickListener { action() }
+    private fun button(text: String, action: () -> Unit) {
+        val b = Button(this)
+        b.text = text
+        b.setTextColor(bg)
+        b.setBackgroundColor(green)
+        b.setOnClickListener { action() }
 
-        val params = LinearLayout.LayoutParams(
+        val p = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
         )
-        params.setMargins(0, dp(8), 0, dp(6))
-        root.addView(button, params)
+        p.setMargins(0, dp(8), 0, dp(6))
+        root.addView(b, p)
     }
 
-    private fun addLink(text: String, action: () -> Unit) {
-        val link = TextView(this)
-        link.text = text
-        link.textSize = 14f
-        link.setTextColor(green)
-        link.gravity = Gravity.CENTER
-        link.setPadding(dp(8), dp(14), dp(8), dp(14))
-        link.setOnClickListener { action() }
-        root.addView(link)
+    private fun link(text: String, action: () -> Unit) {
+        val t = TextView(this)
+        t.text = text
+        t.textSize = 14f
+        t.setTextColor(green)
+        t.gravity = Gravity.CENTER
+        t.setPadding(dp(8), dp(14), dp(8), dp(14))
+        t.setOnClickListener { action() }
+        root.addView(t)
+    }
+
+    private fun section(parent: LinearLayout, text: String) {
+        val t = TextView(this)
+        t.text = text
+        t.textSize = 17f
+        t.setTextColor(green)
+        t.typeface = Typeface.DEFAULT_BOLD
+        t.setPadding(0, dp(12), 0, dp(8))
+        parent.addView(t)
+    }
+
+    private fun row(
+        parent: LinearLayout,
+        name: String,
+        detail: String,
+        action: () -> Unit
+    ) {
+        val t = TextView(this)
+        t.text = "☢  $name\n     $detail"
+        t.textSize = 15f
+        t.setTextColor(white)
+        t.setPadding(dp(14), dp(14), dp(10), dp(14))
+        t.setBackgroundColor(panel)
+
+        val p = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        p.setMargins(0, dp(4), 0, dp(4))
+        parent.addView(t, p)
+        t.setOnClickListener { action() }
     }
 
     private fun showLogin() {
-        setupScreen("ВХОД В СИСТЕМУ", "СВЯЗЬ В ЗОНЕ")
+        setup("ВХОД В СИСТЕМУ", "СВЯЗЬ В ЗОНЕ")
 
-        val email = addField("Email")
-        val password = addField("Пароль", true)
+        val email = field("Email")
+        val password = field("Пароль", true)
 
-        addButton("ВОЙТИ В ЗОНУ") {
+        button("ВОЙТИ В ЗОНУ") {
             AuthManager.login(
                 email.text.toString().trim(),
                 password.text.toString()
@@ -142,22 +164,19 @@ class MainActivity : Activity() {
             }
         }
 
-        addLink("НЕТ АККАУНТА? СОЗДАТЬ") {
-            showRegister()
-        }
-
+        link("НЕТ АККАУНТА? СОЗДАТЬ") { showRegister() }
         setContentView(root)
     }
 
     private fun showRegister() {
-        setupScreen("НОВЫЙ СТАЛКЕР", "РЕГИСТРАЦИЯ В СИСТЕМЕ")
+        setup("НОВЫЙ СТАЛКЕР", "РЕГИСТРАЦИЯ В СИСТЕМЕ")
 
-        val username = addField("Имя пользователя")
-        val email = addField("Email")
-        val password = addField("Придумай пароль", true)
-        val confirm = addField("Повтори пароль", true)
+        val username = field("Имя пользователя")
+        val email = field("Email")
+        val password = field("Придумай пароль", true)
+        val confirm = field("Повтори пароль", true)
 
-        addButton("СОЗДАТЬ АККАУНТ") {
+        button("СОЗДАТЬ АККАУНТ") {
             val name = username.text.toString().trim()
             val mail = email.text.toString().trim()
             val pass = password.text.toString()
@@ -165,16 +184,12 @@ class MainActivity : Activity() {
             when {
                 name.length < 3 ->
                     Toast.makeText(this, "Имя: минимум 3 символа", Toast.LENGTH_SHORT).show()
-
                 !android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches() ->
-                    Toast.makeText(this, "Введи правильный Email", Toast.LENGTH_SHORT).show()
-
+                    Toast.makeText(this, "Неправильный Email", Toast.LENGTH_SHORT).show()
                 pass.length < 6 ->
                     Toast.makeText(this, "Пароль: минимум 6 символов", Toast.LENGTH_SHORT).show()
-
                 pass != confirm.text.toString() ->
                     Toast.makeText(this, "Пароли не совпадают", Toast.LENGTH_SHORT).show()
-
                 else -> AuthManager.register(name, mail, pass) { success, message ->
                     runOnUiThread {
                         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
@@ -184,115 +199,12 @@ class MainActivity : Activity() {
             }
         }
 
-        addLink("УЖЕ ЕСТЬ АККАУНТ? ВОЙТИ") {
-            showLogin()
-        }
-
+        link("УЖЕ ЕСТЬ АККАУНТ? ВОЙТИ") { showLogin() }
         setContentView(root)
     }
 
-    private fun section(text: String) {
-        val label = TextView(this)
-        label.text = text
-        label.textSize = 17f
-        label.setTextColor(green)
-        label.typeface = Typeface.DEFAULT_BOLD
-        label.setPadding(0, dp(12), 0, dp(8))
-        root.addView(label)
-    }
-
-    private fun addScrollableList(): LinearLayout {
-        val scroll = ScrollView(this)
-        val list = LinearLayout(this)
-        list.orientation = LinearLayout.VERTICAL
-        scroll.addView(list)
-
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-        return list
-    }
-
-    private fun addUserRow(
-        list: LinearLayout,
-        name: String,
-        detail: String,
-        action: () -> Unit
-    ) {
-        val item = TextView(this)
-        item.text = "☢  $name\n     $detail"
-        item.textSize = 15f
-        item.setTextColor(white)
-        item.setPadding(dp(14), dp(14), dp(10), dp(14))
-        item.setBackgroundColor(panel)
-
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        params.setMargins(0, dp(4), 0, dp(4))
-        list.addView(item, params)
-        item.setOnClickListener { action() }
-    }
-
     private fun showHome() {
-        setupScreen("ТЫ В ЗОНЕ", "ТВОЯ СВЯЗЬ СО СТАЛКЕРАМИ")
-
-        val list = addScrollableList()
-
-        section("МОИ ЧАТЫ")
-
-        val uid = currentUid
-        if (uid == null) {
-            showLogin()
-            return
-        }
-
-        val chatsRef = db.child("userChats").child(uid)
-
-        activeRef = chatsRef
-        activeListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                list.removeAllViews()
-
-                if (!snapshot.hasChildren()) {
-                    addUserRow(list, "Пока нет чатов", "Найди сталкера ниже") {}
-                }
-
-                for (chat in snapshot.children) {
-                    val peerUid = chat.child("peerUid").getValue(String::class.java)
-                        ?: continue
-
-                    db.child("users").child(peerUid)
-                        .addListenerForSingleValueEvent(object : ValueEventListener {
-                            override fun onDataChange(user: DataSnapshot) {
-                                val name = user.child("username")
-                                    .getValue(String::class.java) ?: "Сталкер"
-
-                                if (isFinishing) return
-
-                                addUserRow(list, name, "Открыть переписку") {
-                                    openChat(peerUid, name)
-                                }
-                            }
-
-                            override fun onCancelled(error: DatabaseError) {}
-                        })
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(this@MainActivity, error.message, Toast.LENGTH_LONG).show()
-            }
-        }
-        chatsRef.addValueEventListener(activeListener!!)
-
-        section("ПОИСК СТАЛКЕРОВ")
+        setup("ТЫ В ЗОНЕ", "ТВОЯ СВЯЗЬ СО СТАЛКЕРАМИ")
 
         val search = EditText(this)
         search.hint = "Введи имя пользователя..."
@@ -303,30 +215,76 @@ class MainActivity : Activity() {
         search.setBackgroundColor(panel)
         root.addView(search)
 
-        val searchList = LinearLayout(this)
-        searchList.orientation = LinearLayout.VERTICAL
-        list.addView(searchList)
+        val status = TextView(this)
+        status.text = "Загрузка пользователей..."
+        status.setTextColor(gray)
+        status.textSize = 13f
+        root.addView(status)
+
+        val scroll = ScrollView(this)
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        scroll.addView(content)
+
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+        )
+
+        section(content, "РЕЗУЛЬТАТЫ ПОИСКА")
+        val results = LinearLayout(this)
+        results.orientation = LinearLayout.VERTICAL
+        content.addView(results)
+
+        section(content, "МОИ ЧАТЫ")
+        val chats = LinearLayout(this)
+        chats.orientation = LinearLayout.VERTICAL
+        content.addView(chats)
+
+        val myUid = uid
+        if (myUid == null) {
+            showLogin()
+            return
+        }
+
+        var allUsers = listOf<DataSnapshot>()
 
         fun updateSearch(query: String) {
-            searchList.removeAllViews()
+            results.removeAllViews()
 
-            val matches = allUsers.filter {
-                val name = it.child("username").getValue(String::class.java) ?: ""
-                name.contains(query, ignoreCase = true) &&
-                    it.child("uid").getValue(String::class.java) != uid
+            if (query.isBlank()) {
+                status.text = "Введи имя пользователя для поиска"
+                return
             }
 
-            for (user in matches) {
-                val peerUid = user.child("uid").getValue(String::class.java) ?: continue
-                val name = user.child("username").getValue(String::class.java) ?: "Сталкер"
+            val matches = allUsers.filter { user ->
+                val name = user.child("username")
+                    .getValue(String::class.java) ?: ""
+                val userId = user.child("uid")
+                    .getValue(String::class.java) ?: user.key ?: ""
 
-                addUserRow(searchList, name, "Начать переписку") {
-                    openChat(peerUid, name)
+                name.contains(query, ignoreCase = true) && userId != myUid
+            }
+
+            status.text = "Найдено пользователей: ${matches.size}"
+
+            if (matches.isEmpty()) {
+                row(results, "Никого не найдено", "Попробуй другое имя") {}
+            }
+
+            matches.forEach { user ->
+                val peerUid = user.child("uid")
+                    .getValue(String::class.java) ?: user.key ?: ""
+                val name = user.child("username")
+                    .getValue(String::class.java) ?: "Сталкер"
+
+                if (peerUid.isNotEmpty()) {
+                    row(results, name, "Начать переписку") {
+                        openChat(peerUid, name)
+                    }
                 }
-            }
-
-            if (query.isNotBlank() && matches.isEmpty()) {
-                addUserRow(searchList, "Никого не найдено", "Попробуй другое имя") {}
             }
         }
 
@@ -338,23 +296,55 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        db.child("users").addListenerForSingleValueEvent(
-            object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    allUsers.clear()
-                    for (user in snapshot.children) {
-                        allUsers.add(user)
-                    }
-                    updateSearch(search.text.toString())
+        usersListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                allUsers = snapshot.children.toList()
+                status.text = "Загружено аккаунтов: ${allUsers.size}"
+                updateSearch(search.text.toString())
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                status.text = "Ошибка Firebase: ${error.message}"
+            }
+        }
+        db.child("users").addValueEventListener(usersListener!!)
+
+        val chatRef = db.child("userChats").child(myUid)
+        activeRef = chatRef
+        activeListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                chats.removeAllViews()
+
+                if (!snapshot.hasChildren()) {
+                    row(chats, "Пока нет чатов", "Найди пользователя выше") {}
                 }
 
-                override fun onCancelled(error: DatabaseError) {
-                    Toast.makeText(this@MainActivity, error.message, Toast.LENGTH_LONG).show()
+                for (chat in snapshot.children) {
+                    val peerUid = chat.child("peerUid")
+                        .getValue(String::class.java) ?: continue
+
+                    db.child("users").child(peerUid)
+                        .addListenerForSingleValueEvent(object : ValueEventListener {
+                            override fun onDataChange(user: DataSnapshot) {
+                                val name = user.child("username")
+                                    .getValue(String::class.java) ?: "Сталкер"
+                                row(chats, name, "Открыть переписку") {
+                                    openChat(peerUid, name)
+                                }
+                            }
+                            override fun onCancelled(error: DatabaseError) {}
+                        })
                 }
             }
-        )
+            override fun onCancelled(error: DatabaseError) {
+                Toast.makeText(this@MainActivity, error.message, Toast.LENGTH_LONG).show()
+            }
+        }
+        chatRef.addValueEventListener(activeListener!!)
 
-        addButton("ВЫЙТИ ИЗ АККАУНТА") {
+        button("ВЫЙТИ ИЗ АККАУНТА") {
+            usersListener?.let { db.child("users").removeEventListener(it) }
+            usersListener = null
             AuthManager.logout()
             showLogin()
         }
@@ -362,136 +352,95 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    private fun chatId(uid1: String, uid2: String): String =
-        if (uid1 < uid2) "${uid1}_$uid2" else "${uid2}_$uid1"
-
     private fun openChat(peerUid: String, peerName: String) {
-        val myUid = currentUid ?: return
-        val id = chatId(myUid, peerUid)
+        val myUid = uid ?: return
+        val id = if (myUid < peerUid) "${myUid}_$peerUid" else "${peerUid}_$myUid"
 
-        setupScreen(peerName, "ЛИЧНАЯ СВЯЗЬ")
+        setup(peerName, "ЛИЧНАЯ СВЯЗЬ")
+        link("← НАЗАД К ЧАТАМ") { showHome() }
 
-        addLink("← НАЗАД К ЧАТАМ") {
-            showHome()
-        }
-
-        val messagesList = LinearLayout(this)
-        messagesList.orientation = LinearLayout.VERTICAL
+        val messages = LinearLayout(this)
+        messages.orientation = LinearLayout.VERTICAL
 
         val scroll = ScrollView(this)
-        scroll.addView(messagesList)
+        scroll.addView(messages)
 
         root.addView(
             scroll,
             LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             )
         )
 
         val inputRow = LinearLayout(this)
         inputRow.orientation = LinearLayout.HORIZONTAL
-        inputRow.gravity = Gravity.CENTER_VERTICAL
 
-        val messageInput = EditText(this)
-        messageInput.hint = "Сообщение..."
-        messageInput.setHintTextColor(gray)
-        messageInput.setTextColor(white)
-        messageInput.setBackgroundColor(panel)
-        messageInput.setPadding(dp(10), dp(5), dp(10), dp(5))
+        val input = EditText(this)
+        input.hint = "Сообщение..."
+        input.setHintTextColor(gray)
+        input.setTextColor(white)
+        input.setBackgroundColor(panel)
 
-        inputRow.addView(
-            messageInput,
-            LinearLayout.LayoutParams(0, dp(52), 1f)
-        )
+        inputRow.addView(input, LinearLayout.LayoutParams(0, dp(52), 1f))
 
         val send = Button(this)
         send.text = "➤"
         send.setTextColor(bg)
         send.setBackgroundColor(green)
         inputRow.addView(send)
-
         root.addView(inputRow)
 
-        val messagesRef = db.child("chats").child(id).child("messages")
-
-        activeRef = messagesRef
+        val ref = db.child("chats").child(id).child("messages")
+        activeRef = ref
         activeListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                messagesList.removeAllViews()
+                messages.removeAllViews()
 
-                for (message in snapshot.children) {
-                    val sender = message.child("senderUid")
+                for (item in snapshot.children) {
+                    val sender = item.child("senderUid")
                         .getValue(String::class.java) ?: ""
-                    val body = message.child("text")
+                    val body = item.child("text")
                         .getValue(String::class.java) ?: ""
 
-                    val item = TextView(this@MainActivity)
-                    item.text = (if (sender == myUid) "ТЫ: " else "$peerName: ") + body
-                    item.textSize = 15f
-                    item.setTextColor(if (sender == myUid) green else white)
-                    item.setPadding(dp(12), dp(10), dp(12), dp(10))
-                    item.setBackgroundColor(panel)
-
-                    val params = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    params.setMargins(0, dp(3), 0, dp(3))
-                    messagesList.addView(item, params)
+                    val line = TextView(this@MainActivity)
+                    line.text = (if (sender == myUid) "ТЫ: " else "$peerName: ") + body
+                    line.textSize = 15f
+                    line.setTextColor(if (sender == myUid) green else white)
+                    line.setPadding(dp(12), dp(10), dp(12), dp(10))
+                    line.setBackgroundColor(panel)
+                    messages.addView(line)
                 }
-
                 scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
             }
-
             override fun onCancelled(error: DatabaseError) {
                 Toast.makeText(this@MainActivity, error.message, Toast.LENGTH_LONG).show()
             }
         }
-        messagesRef.addValueEventListener(activeListener!!)
+        ref.addValueEventListener(activeListener!!)
 
         send.setOnClickListener {
-            val text = messageInput.text.toString().trim()
-
-            if (text.isNotEmpty()) {
+            val body = input.text.toString().trim()
+            if (body.isNotEmpty()) {
                 send.isEnabled = false
-
-                val message = mapOf(
-                    "senderUid" to myUid,
-                    "text" to text,
-                    "timestamp" to ServerValue.TIMESTAMP
-                )
-
-                messagesRef.push().setValue(message)
-                    .addOnSuccessListener {
-                        val chatInfo = mapOf(
-                            "peerUid" to peerUid,
-                            "updatedAt" to ServerValue.TIMESTAMP
-                        )
-
-                        db.child("userChats").child(myUid).child(id)
-                            .setValue(chatInfo)
-
-                        db.child("userChats").child(peerUid).child(id)
-                            .setValue(
-                                mapOf(
-                                    "peerUid" to myUid,
-                                    "updatedAt" to ServerValue.TIMESTAMP
-                                )
-                            )
-
-                        messageInput.text.clear()
-                        send.isEnabled = true
-                    }
-                    .addOnFailureListener { error ->
-                        send.isEnabled = true
-                        Toast.makeText(
-                            this,
-                            error.message ?: "Ошибка отправки",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
+                ref.push().setValue(
+                    mapOf(
+                        "senderUid" to myUid,
+                        "text" to body,
+                        "timestamp" to ServerValue.TIMESTAMP
+                    )
+                ).addOnSuccessListener {
+                    db.child("userChats").child(myUid).child(id).setValue(
+                        mapOf("peerUid" to peerUid, "updatedAt" to ServerValue.TIMESTAMP)
+                    )
+                    db.child("userChats").child(peerUid).child(id).setValue(
+                        mapOf("peerUid" to myUid, "updatedAt" to ServerValue.TIMESTAMP)
+                    )
+                    input.text.clear()
+                    send.isEnabled = true
+                }.addOnFailureListener {
+                    send.isEnabled = true
+                    Toast.makeText(this, it.message ?: "Ошибка отправки", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -500,6 +449,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         clearListener()
+        usersListener?.let { db.child("users").removeEventListener(it) }
         super.onDestroy()
     }
 }
