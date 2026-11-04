@@ -22,7 +22,6 @@ import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.net.URL
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
@@ -337,17 +336,13 @@ class MainActivity : Activity() {
                 pendingChatImageUid = null
 
                 if (receiverUid != null) {
-                    toast("Отправляем фотографию...")
-
-                    ChatManager.sendImage(receiverUid, uri) { success, message ->
-                        runOnUiThread {
-                            toast(message)
-                        }
-                    }
+                    prepareAndSendChatImage(uri, receiverUid)
                 }
             }
         }
     }
+
+    // СОХРАНЕНИЕ ФОТО ПРОФИЛЯ
 
     private fun saveProfilePhoto(uri: Uri) {
         val uid = auth.currentUser?.uid ?: return
@@ -388,37 +383,88 @@ class MainActivity : Activity() {
                     toast(it.message ?: "Ошибка сохранения фото")
                 }
 
+            if (resized !== bitmap) resized.recycle()
             bitmap.recycle()
-            resized.recycle()
 
         } catch (_: Exception) {
             toast("Ошибка обработки фотографии")
         }
     }
 
-    // ЗАГРУЗКА ФОТОГРАФИИ ИЗ ЧАТА
+    // ПОДГОТОВКА И ОТПРАВКА ФОТО В ЧАТ
 
-    private fun loadChatImage(url: String, imageView: ImageView) {
-        imageView.tag = url
+    private fun prepareAndSendChatImage(uri: Uri, receiverUid: String) {
+        toast("Подготавливаем фотографию...")
 
         imageExecutor.execute {
             try {
-                val connection = URL(url).openConnection()
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-
-                val bitmap = connection.getInputStream().use {
+                val bitmap = contentResolver.openInputStream(uri)?.use {
                     BitmapFactory.decodeStream(it)
-                }
+                } ?: throw Exception("Не удалось открыть фотографию")
+
+                val scale = minOf(
+                    640f / bitmap.width,
+                    640f / bitmap.height,
+                    1f
+                )
+
+                val resized = Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1),
+                    true
+                )
+
+                val output = java.io.ByteArrayOutputStream()
+                resized.compress(Bitmap.CompressFormat.JPEG, 55, output)
+
+                val encoded = Base64.encodeToString(
+                    output.toByteArray(),
+                    Base64.NO_WRAP
+                )
+
+                if (resized !== bitmap) resized.recycle()
+                bitmap.recycle()
 
                 imageHandler.post {
-                    if (imageView.tag == url && bitmap != null) {
+                    ChatManager.sendImage(receiverUid, encoded) { success, message ->
+                        runOnUiThread {
+                            toast(message)
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                imageHandler.post {
+                    toast(e.message ?: "Ошибка обработки фотографии")
+                }
+            }
+        }
+    }
+
+    // ЗАГРУЗКА ФОТОГРАФИИ ИЗ ЧАТА
+
+    private fun loadChatImage(encoded: String, imageView: ImageView) {
+        imageView.tag = encoded
+
+        imageExecutor.execute {
+            try {
+                val bytes = Base64.decode(encoded, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(
+                    bytes,
+                    0,
+                    bytes.size
+                )
+
+                imageHandler.post {
+                    if (imageView.tag == encoded && bitmap != null) {
                         imageView.setImageBitmap(bitmap)
                     }
                 }
+
             } catch (_: Exception) {
                 imageHandler.post {
-                    if (imageView.tag == url) {
+                    if (imageView.tag == encoded) {
                         imageView.setImageResource(
                             android.R.drawable.ic_menu_report_image
                         )
@@ -1118,7 +1164,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, 0, 1f)
         )
 
-        // ПАНЕЛЬ ВВОДА И СКРЕПКА
+        // ПАНЕЛЬ ВВОДА
 
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1233,7 +1279,7 @@ class MainActivity : Activity() {
                         val messageText = snapshot.child("text")
                             .getValue(String::class.java) ?: ""
 
-                        val imageUrl = snapshot.child("imageUrl")
+                        val imageBase64 = snapshot.child("imageBase64")
                             .getValue(String::class.java) ?: ""
 
                         val messageType = snapshot.child("type")
@@ -1258,7 +1304,7 @@ class MainActivity : Activity() {
                             )
                         }
 
-                        if (messageType == "image" && imageUrl.isNotBlank()) {
+                        if (messageType == "image" && imageBase64.isNotBlank()) {
 
                             val photo = ImageView(this).apply {
                                 scaleType = ImageView.ScaleType.CENTER_CROP
@@ -1274,7 +1320,7 @@ class MainActivity : Activity() {
                                 LinearLayout.LayoutParams(dp(220), dp(220))
                             )
 
-                            loadChatImage(imageUrl, photo)
+                            loadChatImage(imageBase64, photo)
 
                         } else if (messageText.isNotBlank()) {
 
