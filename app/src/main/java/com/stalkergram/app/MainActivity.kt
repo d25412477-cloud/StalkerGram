@@ -1,4 +1,3 @@
-
 package com.stalkergram.app
 
 import android.app.Activity
@@ -283,7 +282,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // НИЖНЯЯ НАВИГАЦИЯ
+    // НИЖНЯЯ ПАНЕЛЬ: 4 КНОПКИ
 
     private fun addBottomNavigation(selected: Int) {
         val navigation = LinearLayout(this).apply {
@@ -296,7 +295,8 @@ class MainActivity : Activity() {
         val items = listOf(
             Triple("💬", "Чаты", 0),
             Triple("👥", "Контакты", 1),
-            Triple("👤", "Профиль", 2)
+            Triple("⚙", "Настройки", 2),
+            Triple("👤", "Профиль", 3)
         )
 
         items.forEach { item ->
@@ -311,23 +311,27 @@ class MainActivity : Activity() {
                     12
                 )
                 isClickable = true
+
                 setOnClickListener {
                     when (item.third) {
                         0 -> showHome()
                         1 -> showContacts()
-                        2 -> showProfile()
+                        2 -> showSettings()
+                        3 -> showProfile()
                     }
                 }
             }
 
             val icon = makeText(
-                item.first, 22f,
+                item.first,
+                21f,
                 if (active) Color.rgb(25, 220, 130) else Color.LTGRAY
             )
             icon.gravity = Gravity.CENTER
 
             val label = makeText(
-                item.second, 11f,
+                item.second,
+                10f,
                 if (active) Color.rgb(25, 220, 130) else Color.LTGRAY,
                 active
             )
@@ -366,11 +370,6 @@ class MainActivity : Activity() {
             makeText("StalkerGram", 25f, Color.rgb(25, 220, 130), true),
             LinearLayout.LayoutParams(0, dp(48), 1f)
         )
-
-        val menuButton = makeText("⋮", 30f, Color.WHITE, true)
-        menuButton.gravity = Gravity.CENTER
-        header.addView(menuButton, LinearLayout.LayoutParams(dp(45), dp(48)))
-        menuButton.setOnClickListener { showMainMenu(menuButton) }
 
         root.addView(header)
 
@@ -524,37 +523,6 @@ class MainActivity : Activity() {
 
         root.addView(floating, LinearLayout.LayoutParams(-1, -2))
         addBottomNavigation(0)
-    }
-
-    // МЕНЮ ВЕРХНЕЙ ПАНЕЛИ
-
-    private fun showMainMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-
-        popup.menu.add("🌙  Ночной режим")
-        popup.menu.add("📢  Создать канал")
-        popup.menu.add("⭐  Избранное")
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.title.toString()) {
-                "🌙  Ночной режим" -> {
-                    prefs.edit().putString("theme", "Тёмная").apply()
-                    toast("Ночной режим включён")
-                    true
-                }
-                "📢  Создать канал" -> {
-                    showCreateChannel()
-                    true
-                }
-                "⭐  Избранное" -> {
-                    showFavorites()
-                    true
-                }
-                else -> false
-            }
-        }
-
-        popup.show()
     }
 
     // СОЗДАНИЕ КАНАЛА
@@ -842,7 +810,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ЭКРАН ПЕРЕПИСКИ — МИНИМАЛИЗМ
+    // ЭКРАН ПЕРЕПИСКИ
 
     private fun openChat(otherUid: String, username: String) {
         clearAllListeners()
@@ -1017,7 +985,7 @@ class MainActivity : Activity() {
         )
     }
 
-    // ПРОФИЛЬ
+    // ПРОФИЛЬ И ОБЩИЕ КАРТОЧКИ
 
     private fun settingsCard(): LinearLayout {
         return LinearLayout(this).apply {
@@ -1029,7 +997,7 @@ class MainActivity : Activity() {
 
     private fun showProfile() {
         clearAllListeners()
-        selectedSection = 2
+        selectedSection = 3
         newRoot()
 
         val uid = auth.currentUser?.uid ?: return
@@ -1062,14 +1030,13 @@ class MainActivity : Activity() {
         settings.setOnClickListener { showSettings() }
 
         content.addView(header)
-        addGap(10)
 
-        val avatar = makeAvatar("Я")
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        val avatar = makeAvatar("Я")
         top.addView(avatar, LinearLayout.LayoutParams(dp(100), dp(100)))
         loadAvatar(uid, avatar)
         avatar.setOnClickListener { chooseProfilePhoto() }
@@ -1095,8 +1062,6 @@ class MainActivity : Activity() {
         content.addView(edit, LinearLayout.LayoutParams(-1, dp(50)))
         edit.setOnClickListener { showEditName() }
 
-        addGap(12)
-
         val aboutCard = settingsCard()
         aboutCard.addView(
             makeText("О СЕБЕ", 12f, Color.rgb(25, 220, 130), true)
@@ -1110,21 +1075,15 @@ class MainActivity : Activity() {
         }
         content.addView(aboutCard)
 
-        addGap(10)
-
         val handleButton = makeButton("Изменить username")
         content.addView(handleButton, LinearLayout.LayoutParams(-1, dp(48)))
         handleButton.setOnClickListener { showEditHandle() }
-
-        addGap(10)
 
         val statusButton = makeButton("Изменить статус")
         content.addView(statusButton, LinearLayout.LayoutParams(-1, dp(48)))
         statusButton.setOnClickListener {
             showEditField("status", "Статус", "Твой статус...", 60)
         }
-
-        addGap(12)
 
         val logout = makeButton("Выйти из аккаунта")
         content.addView(logout, LinearLayout.LayoutParams(-1, dp(48)))
@@ -1166,7 +1125,7 @@ class MainActivity : Activity() {
             }
         )
 
-        addBottomNavigation(2)
+        addBottomNavigation(3)
     }
 
     // РЕДАКТИРОВАНИЕ ПРОФИЛЯ
@@ -1414,7 +1373,7 @@ class MainActivity : Activity() {
         val back = makeText("‹", 34f)
         back.gravity = Gravity.CENTER
         header.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
-        back.setOnClickListener { showSettings() }
+        back.setOnClickListener { showHome() }
 
         header.addView(
             makeText(title, 21f, Color.WHITE, true),
@@ -1426,7 +1385,9 @@ class MainActivity : Activity() {
 
     private fun showSettings() {
         clearAllListeners()
+        selectedSection = 2
         newRoot()
+
         settingsHeader("Настройки")
         addGap(12)
 
@@ -1489,6 +1450,7 @@ class MainActivity : Activity() {
         })
 
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        addBottomNavigation(2)
     }
 
     private fun showSimpleSetting(title: String, message: String) {
