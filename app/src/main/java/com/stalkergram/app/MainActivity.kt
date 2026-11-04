@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -18,613 +19,509 @@ import java.util.Locale
 
 class MainActivity : Activity() {
 
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseConfig.database.reference
+    private val auth by lazy { FirebaseAuth.getInstance() }
+    private val db by lazy { FirebaseConfig.database.reference }
 
     private lateinit var root: LinearLayout
+    private var users = mutableListOf<UserItem>()
     private var chatListListener: ValueEventListener? = null
-    private var usersListener: ValueEventListener? = null
     private var messagesListener: ValueEventListener? = null
+    private var activeChatUid: String? = null
+    private var searchQuery = ""
 
-    private var activeChatUid = ""
-    private var activeChatName = ""
-
-    private val usersCache = mutableListOf<Pair<String, String>>()
-    private lateinit var usersContainer: LinearLayout
-    private lateinit var chatsContainer: LinearLayout
-    private lateinit var searchInput: EditText
-
-    private val green = Color.rgb(90, 255, 100)
-    private val dark = Color.rgb(15, 18, 15)
-    private val panel = Color.rgb(29, 34, 29)
-    private val white = Color.WHITE
+    private data class UserItem(val uid: String, val username: String)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (auth.currentUser == null) showAuth(false) else showHome()
+    }
 
-        if (auth.currentUser != null) {
-            showHome()
-        } else {
-            showAuth(false)
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    private fun newRoot(): LinearLayout {
+        root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(12))
+            setBackgroundColor(Color.rgb(13, 18, 25))
         }
-    }
-
-    private fun dp(value: Int): Int {
-        return (value * resources.displayMetrics.density).toInt()
-    }
-
-    private fun setupRoot() {
-        root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(16), dp(16), dp(16), dp(16))
-        root.setBackgroundColor(dark)
         setContentView(root)
+        return root
     }
 
-    private fun addTitle(text: String) {
-        val title = TextView(this)
-        title.text = text
-        title.textSize = 25f
-        title.setTextColor(green)
-        title.typeface = Typeface.DEFAULT_BOLD
-        title.gravity = Gravity.CENTER
-        title.setPadding(0, dp(12), 0, dp(18))
-        root.addView(title)
-    }
-
-    private fun makeButton(text: String): Button {
-        val button = Button(this)
-        button.text = text
-        button.setTextColor(Color.BLACK)
-        button.setBackgroundColor(green)
-        return button
-    }
-
-    private fun makeInput(hint: String, password: Boolean = false): EditText {
-        val input = EditText(this)
-        input.hint = hint
-        input.setHintTextColor(Color.LTGRAY)
-        input.setTextColor(white)
-        input.textSize = 16f
-        input.setSingleLine(true)
-        input.setPadding(dp(12), dp(8), dp(12), dp(8))
-        input.setBackgroundColor(panel)
-
-        if (password) {
-            input.inputType =
-                android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+    private fun makeText(
+        value: String,
+        size: Float = 16f,
+        color: Int = Color.WHITE,
+        bold: Boolean = false
+    ): TextView {
+        return TextView(this).apply {
+            text = value
+            textSize = size
+            setTextColor(color)
+            if (bold) setTypeface(null, Typeface.BOLD)
         }
+    }
 
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(52)
-        )
-        params.bottomMargin = dp(12)
-        root.addView(input, params)
+    private fun makeInput(hintText: String, password: Boolean = false): EditText {
+        return EditText(this).apply {
+            hint = hintText
+            setHintTextColor(Color.GRAY)
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            singleLine = true
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = rounded(Color.rgb(29, 38, 49), 12)
+            if (password) inputType = 129
+        }
+    }
 
-        return input
+    private fun rounded(color: Int, radius: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+        }
+    }
+
+    private fun makeButton(label: String): Button {
+        return Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            background = rounded(Color.rgb(25, 190, 110), 12)
+        }
+    }
+
+    private fun addGap(height: Int = 10) {
+        root.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
     }
 
     private fun showAuth(registerMode: Boolean) {
         clearAllListeners()
-        setupRoot()
-        addTitle("STALKERGRAM")
+        newRoot()
+
+        val title = makeText("StalkerGram", 30f, Color.rgb(25, 220, 130), true)
+        title.gravity = Gravity.CENTER
+        root.addView(title, LinearLayout.LayoutParams(-1, dp(70)))
+
+        val subtitle = makeText(
+            if (registerMode) "Создай новый аккаунт" else "Войди в свой аккаунт",
+            16f, Color.LTGRAY
+        )
+        subtitle.gravity = Gravity.CENTER
+        root.addView(subtitle)
+        addGap(24)
 
         val usernameInput = makeInput("Имя пользователя")
-        if (!registerMode) {
-            usernameInput.visibility = View.GONE
-        }
+        root.addView(usernameInput, LinearLayout.LayoutParams(-1, dp(52)))
+        if (!registerMode) usernameInput.visibility = View.GONE
 
-        val emailInput = makeInput("Email")
+        addGap()
+        val emailInput = makeInput("Электронная почта")
+        emailInput.inputType = 33
+        root.addView(emailInput, LinearLayout.LayoutParams(-1, dp(52)))
+
+        addGap()
         val passwordInput = makeInput("Пароль", true)
+        root.addView(passwordInput, LinearLayout.LayoutParams(-1, dp(52)))
 
-        val actionButton = makeButton(
-            if (registerMode) "ЗАРЕГИСТРИРОВАТЬСЯ" else "ВОЙТИ"
-        )
-        root.addView(actionButton)
+        addGap(18)
+        val actionButton = makeButton(if (registerMode) "Зарегистрироваться" else "Войти")
+        root.addView(actionButton, LinearLayout.LayoutParams(-1, dp(52)))
 
-        val switchButton = Button(this)
-        switchButton.text =
-            if (registerMode) "Уже есть аккаунт? Войти"
-            else "Создать аккаунт"
-        switchButton.setTextColor(green)
-        switchButton.setBackgroundColor(dark)
-        root.addView(switchButton)
-
-        switchButton.setOnClickListener {
-            showAuth(!registerMode)
+        addGap(8)
+        val switchButton = Button(this).apply {
+            text = if (registerMode) "Уже есть аккаунт? Войти" else "Создать аккаунт"
+            isAllCaps = false
+            setTextColor(Color.rgb(25, 220, 130))
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
         }
+        root.addView(switchButton, LinearLayout.LayoutParams(-1, dp(48)))
 
         actionButton.setOnClickListener {
+            val username = usernameInput.text.toString().trim()
             val email = emailInput.text.toString().trim()
             val password = passwordInput.text.toString()
-            val username = usernameInput.text.toString().trim()
 
-            if (email.isEmpty() || password.isEmpty() ||
-                (registerMode && username.isEmpty())) {
+            if (email.isBlank() || password.isBlank() ||
+                (registerMode && username.isBlank())
+            ) {
                 toast("Заполни все поля")
                 return@setOnClickListener
             }
 
+            actionButton.isEnabled = false
             if (registerMode) {
                 auth.createUserWithEmailAndPassword(email, password)
-                    .addOnSuccessListener {
-                        val uid = auth.currentUser?.uid ?: return@addOnSuccessListener
-
-                        val profile = mapOf(
-                            "uid" to uid,
-                            "username" to username,
-                            "email" to email,
-                            "createdAt" to ServerValue.TIMESTAMP
-                        )
-
-                        db.child("users").child(uid).setValue(profile)
-                            .addOnSuccessListener {
-                                toast("Аккаунт создан!")
-                                showHome()
+                    .addOnCompleteListener { task ->
+                        actionButton.isEnabled = true
+                        if (task.isSuccessful) {
+                            val uid = auth.currentUser?.uid
+                            if (uid == null) {
+                                toast("Не удалось получить аккаунт")
+                                return@addOnCompleteListener
                             }
-                            .addOnFailureListener {
-                                toast(it.message ?: "Ошибка профиля")
-                            }
-                    }
-                    .addOnFailureListener {
-                        toast(it.message ?: "Ошибка регистрации")
+                            val userData = mapOf(
+                                "uid" to uid,
+                                "username" to username,
+                                "email" to email,
+                                "createdAt" to ServerValue.TIMESTAMP
+                            )
+                            db.child("users").child(uid).setValue(userData)
+                                .addOnSuccessListener { showHome() }
+                                .addOnFailureListener {
+                                    toast(it.message ?: "Ошибка сохранения профиля")
+                                }
+                        } else {
+                            toast(task.exception?.message ?: "Ошибка регистрации")
+                        }
                     }
             } else {
                 auth.signInWithEmailAndPassword(email, password)
-                    .addOnSuccessListener {
-                        toast("Вход выполнен!")
-                        showHome()
-                    }
-                    .addOnFailureListener {
-                        toast(it.message ?: "Ошибка входа")
+                    .addOnCompleteListener { task ->
+                        actionButton.isEnabled = true
+                        if (task.isSuccessful) {
+                            showHome()
+                        } else {
+                            toast(task.exception?.message ?: "Ошибка входа")
+                        }
                     }
             }
         }
+
+        switchButton.setOnClickListener { showAuth(!registerMode) }
     }
 
     private fun showHome() {
         clearAllListeners()
-        setupRoot()
-        addTitle("STALKERGRAM")
+        activeChatUid = null
+        searchQuery = ""
+        newRoot()
 
-        val topRow = LinearLayout(this)
-        topRow.orientation = LinearLayout.HORIZONTAL
-        topRow.gravity = Gravity.CENTER_VERTICAL
-
-        val welcome = TextView(this)
-        welcome.text = "МОЙ АККАУНТ"
-        welcome.setTextColor(green)
-        welcome.textSize = 16f
-        welcome.typeface = Typeface.DEFAULT_BOLD
-        topRow.addView(
-            welcome,
-            LinearLayout.LayoutParams(0, dp(48), 1f)
-        )
-
-        val logoutButton = Button(this)
-        logoutButton.text = "ВЫЙТИ"
-        logoutButton.setTextColor(green)
-        logoutButton.setBackgroundColor(dark)
-        topRow.addView(logoutButton)
-
-        root.addView(topRow)
-
-        logoutButton.setOnClickListener {
-            auth.signOut()
-            showAuth(false)
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
+        val title = makeText("StalkerGram", 25f, Color.rgb(25, 220, 130), true)
+        header.addView(title, LinearLayout.LayoutParams(0, dp(48), 1f))
 
-        searchInput = EditText(this)
-        searchInput.hint = "Поиск пользователей..."
-        searchInput.setTextColor(white)
-        searchInput.setHintTextColor(Color.LTGRAY)
-        searchInput.setSingleLine(true)
-        searchInput.setPadding(dp(12), 0, dp(12), 0)
-        searchInput.setBackgroundColor(panel)
+        val logout = Button(this).apply {
+            text = "Выйти"
+            isAllCaps = false
+            setTextColor(Color.LTGRAY)
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            setOnClickListener {
+                clearAllListeners()
+                auth.signOut()
+                showAuth(false)
+            }
+        }
+        header.addView(logout)
+        root.addView(header)
 
-        root.addView(
-            searchInput,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(50)
-            )
-        )
+        val search = makeInput("Поиск пользователей")
+        root.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
+        addGap(12)
 
         val scroll = ScrollView(this)
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
-        val content = LinearLayout(this)
-        content.orientation = LinearLayout.VERTICAL
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         scroll.addView(content)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val chatsTitle = sectionTitle("МОИ ЧАТЫ")
-        content.addView(chatsTitle)
-
-        chatsContainer = LinearLayout(this)
-        chatsContainer.orientation = LinearLayout.VERTICAL
+        val chatsTitle = makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true)
+        content.addView(chatsTitle, LinearLayout.LayoutParams(-1, dp(38)))
+        val chatsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         content.addView(chatsContainer)
 
-        val usersTitle = sectionTitle("ПОЛЬЗОВАТЕЛИ")
-        content.addView(usersTitle)
+        val usersTitle = makeText("ПОЛЬЗОВАТЕЛИ", 14f, Color.rgb(25, 220, 130), true)
+        val usersTitleParams = LinearLayout.LayoutParams(-1, dp(42))
+        usersTitleParams.topMargin = dp(12)
+        content.addView(usersTitle, usersTitleParams)
 
-        usersContainer = LinearLayout(this)
-        usersContainer.orientation = LinearLayout.VERTICAL
+        val usersContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         content.addView(usersContainer)
 
-        searchInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(
-                s: CharSequence?, start: Int, count: Int, after: Int
-            ) {}
-
-            override fun onTextChanged(
-                s: CharSequence?, start: Int, before: Int, count: Int
-            ) {
-                renderUsers(s?.toString() ?: "")
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                searchQuery = s?.toString().orEmpty()
+                renderUsers(usersContainer)
             }
-
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        loadUsers()
-        loadChats()
+        loadUsers(usersContainer)
+        loadChats(chatsContainer)
     }
 
-    private fun sectionTitle(text: String): TextView {
-        val view = TextView(this)
-        view.text = text
-        view.textSize = 17f
-        view.setTextColor(green)
-        view.typeface = Typeface.DEFAULT_BOLD
-        view.setPadding(0, dp(20), 0, dp(8))
-        return view
-    }
-
-    private fun loadUsers() {
-        val ref = db.child("users")
-
-        usersListener = object : ValueEventListener {
+    private fun loadUsers(container: LinearLayout) {
+        val myUid = auth.currentUser?.uid ?: return
+        db.child("users").addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                usersCache.clear()
-
-                val myUid = auth.currentUser?.uid ?: return
-
-                for (user in snapshot.children) {
-                    val uid = user.key ?: continue
+                users.clear()
+                for (child in snapshot.children) {
+                    val uid = child.key ?: continue
                     if (uid == myUid) continue
-
-                    val name = user.child("username")
-                        .getValue(String::class.java)
+                    val username = child.child("username").getValue(String::class.java)
+                        ?: child.child("email").getValue(String::class.java)
                         ?: "Пользователь"
-
-                    usersCache.add(Pair(uid, name))
+                    users.add(UserItem(uid, username))
                 }
-
-                renderUsers(searchInput.text.toString())
+                users.sortBy { it.username.lowercase(Locale.getDefault()) }
+                renderUsers(container)
             }
 
             override fun onCancelled(error: DatabaseError) {
                 toast(error.message)
             }
-        }
-
-        ref.addValueEventListener(usersListener!!)
+        })
     }
 
-    private fun renderUsers(query: String) {
-        if (!::usersContainer.isInitialized) return
-
-        usersContainer.removeAllViews()
-
-        val filtered = usersCache.filter {
-            it.second.contains(query.trim(), ignoreCase = true)
+    private fun renderUsers(container: LinearLayout) {
+        container.removeAllViews()
+        val filtered = users.filter {
+            it.username.contains(searchQuery, ignoreCase = true)
         }
-
         if (filtered.isEmpty()) {
-            addEmptyText(usersContainer, "Пользователи не найдены")
+            container.addView(makeText(
+                if (searchQuery.isBlank()) "Пользователей пока нет" else "Ничего не найдено",
+                14f, Color.GRAY
+            ))
             return
         }
-
-        for ((uid, name) in filtered) {
-            val item = makeListItem(name, "Открыть переписку")
-            item.setOnClickListener {
-                openChat(uid, name)
-            }
-            usersContainer.addView(item)
+        filtered.forEach { user ->
+            container.addView(makeListItem(
+                user.username,
+                "Начать переписку",
+                null
+            ) {
+                openChat(user.uid, user.username)
+            })
         }
     }
 
-    private fun loadChats() {
+    private fun loadChats(container: LinearLayout) {
         chatListListener = ChatListManager.listenChats(
-            { previews ->
-                if (!::chatsContainer.isInitialized) return@listenChats
-
-                chatsContainer.removeAllViews()
-
+            callback = { previews ->
+                container.removeAllViews()
                 if (previews.isEmpty()) {
-                    addEmptyText(chatsContainer, "Пока нет переписок")
+                    container.addView(makeText("Здесь пока нет чатов", 14f, Color.GRAY))
                     return@listenChats
                 }
-
-                for (chat in previews) {
-                    val lastText = if (chat.lastMessage.isBlank()) {
-                        "Нет сообщений"
-                    } else {
-                        chat.lastMessage
-                    }
-
-                    val time = if (chat.timestamp > 0L) {
-                        SimpleDateFormat(
-                            "HH:mm",
-                            Locale.getDefault()
-                        ).format(Date(chat.timestamp))
-                    } else {
-                        ""
-                    }
-
-                    val item = makeListItem(
-                        chat.username,
-                        "$lastText    $time"
-                    )
-
-                    item.setOnClickListener {
-                        openChat(chat.uid, chat.username)
-                    }
-
-                    chatsContainer.addView(item)
+                previews.forEach { preview ->
+                    val time = if (preview.timestamp > 0L) {
+                        SimpleDateFormat("HH:mm", Locale.getDefault())
+                            .format(Date(preview.timestamp))
+                    } else ""
+                    val message = preview.lastMessage.ifBlank { "Нет сообщений" }
+                    container.addView(makeListItem(
+                        preview.username,
+                        message,
+                        time
+                    ) {
+                        openChat(preview.uid, preview.username)
+                    })
                 }
             },
-            { error ->
-                toast(error)
-            }
+            onError = { message -> toast(message) }
         )
+    }
+
+    private fun makeAvatar(name: String): TextView {
+        val initial = name.trim().firstOrNull()?.toString()
+            ?.uppercase(Locale.getDefault()) ?: "?"
+        return TextView(this).apply {
+            text = initial
+            textSize = 19f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.rgb(25, 155, 100))
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+        }
     }
 
     private fun makeListItem(
-        title: String,
-        subtitle: String
-    ): LinearLayout {
-        val item = LinearLayout(this)
-        item.orientation = LinearLayout.VERTICAL
-        item.setPadding(dp(14), dp(10), dp(14), dp(10))
-        item.setBackgroundColor(panel)
+        name: String,
+        message: String,
+        time: String?,
+        onClick: () -> Unit
+    ): View {
+        val item = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = rounded(Color.rgb(24, 32, 43), 14)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
 
-        val name = TextView(this)
-        name.text = title
-        name.textSize = 17f
-        name.setTextColor(green)
-        name.typeface = Typeface.DEFAULT_BOLD
+        val avatar = makeAvatar(name)
+        item.addView(avatar, LinearLayout.LayoutParams(dp(48), dp(48)))
 
-        val message = TextView(this)
-        message.text = subtitle
-        message.textSize = 13f
-        message.setTextColor(Color.LTGRAY)
+        val textColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, dp(4), 0)
+        }
+        textColumn.addView(makeText(name, 16f, Color.WHITE, true))
+        textColumn.addView(makeText(message, 13f, Color.LTGRAY))
+        item.addView(textColumn, LinearLayout.LayoutParams(0, -2, 1f))
 
-        item.addView(name)
-        item.addView(message)
+        if (!time.isNullOrBlank()) {
+            val timeView = makeText(time, 12f, Color.rgb(25, 220, 130))
+            item.addView(timeView)
+        }
 
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        params.bottomMargin = dp(7)
+        val params = LinearLayout.LayoutParams(-1, -2)
+        params.bottomMargin = dp(8)
         item.layoutParams = params
-
         return item
     }
 
-    private fun addEmptyText(container: LinearLayout, text: String) {
-        val view = TextView(this)
-        view.text = text
-        view.textSize = 14f
-        view.setTextColor(Color.LTGRAY)
-        view.setPadding(dp(8), dp(12), dp(8), dp(12))
-        container.addView(view)
-    }
-
     private fun openChat(uid: String, name: String) {
-        clearChatListener()
-
+        clearMessagesListener()
         activeChatUid = uid
-        activeChatName = name
+        newRoot()
 
-        clearHomeListeners()
-        setupRoot()
-
-        val header = LinearLayout(this)
-        header.orientation = LinearLayout.HORIZONTAL
-        header.gravity = Gravity.CENTER_VERTICAL
-
-        val back = Button(this)
-        back.text = "← НАЗАД"
-        back.setTextColor(green)
-        back.setBackgroundColor(dark)
-        header.addView(back)
-
-        val title = TextView(this)
-        title.text = name
-        title.textSize = 19f
-        title.setTextColor(green)
-        title.typeface = Typeface.DEFAULT_BOLD
-        title.gravity = Gravity.CENTER
-        header.addView(
-            title,
-            LinearLayout.LayoutParams(0, dp(48), 1f)
-        )
-
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val back = Button(this).apply {
+            text = "‹"
+            textSize = 30f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            setOnClickListener { showHome() }
+        }
+        header.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(makeAvatar(name), LinearLayout.LayoutParams(dp(42), dp(42)))
+        val nameView = makeText(name, 18f, Color.WHITE, true)
+        nameView.setPadding(dp(12), 0, 0, 0)
+        header.addView(nameView)
         root.addView(header)
 
-        back.setOnClickListener {
-            showHome()
-        }
-
         val messageScroll = ScrollView(this)
-        root.addView(
-            messageScroll,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
-        val messageContainer = LinearLayout(this)
-        messageContainer.orientation = LinearLayout.VERTICAL
-        messageContainer.setPadding(0, dp(8), 0, dp(8))
+        val messageContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, dp(12))
+        }
         messageScroll.addView(messageContainer)
+        root.addView(messageScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val bottom = LinearLayout(this)
-        bottom.orientation = LinearLayout.HORIZONTAL
-        bottom.gravity = Gravity.CENTER_VERTICAL
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val input = makeInput("Сообщение...")
+        input.imeOptions = EditorInfo.IME_ACTION_SEND
+        bottom.addView(input, LinearLayout.LayoutParams(0, dp(52), 1f))
 
-        val messageInput = EditText(this)
-        messageInput.hint = "Сообщение..."
-        messageInput.setTextColor(white)
-        messageInput.setHintTextColor(Color.LTGRAY)
-        messageInput.setBackgroundColor(panel)
-        messageInput.setSingleLine(true)
-        messageInput.imeOptions = EditorInfo.IME_ACTION_SEND
-
-        bottom.addView(
-            messageInput,
-            LinearLayout.LayoutParams(0, dp(52), 1f)
-        )
-
-        val sendButton = makeButton("➤")
-        bottom.addView(sendButton)
-
+        val send = makeButton("➤")
+        val sendParams = LinearLayout.LayoutParams(dp(58), dp(52))
+        sendParams.leftMargin = dp(8)
+        bottom.addView(send, sendParams)
         root.addView(bottom)
 
         fun sendCurrentMessage() {
-            val text = messageInput.text.toString()
-
+            val text = input.text.toString().trim()
             if (text.isBlank()) return
-
+            send.isEnabled = false
             ChatManager.sendMessage(uid, text) { success, result ->
                 runOnUiThread {
-                    if (success) {
-                        messageInput.setText("")
-                    } else {
-                        toast(result)
-                    }
+                    send.isEnabled = true
+                    if (success) input.text.clear() else toast(result)
                 }
             }
         }
 
-        sendButton.setOnClickListener {
-            sendCurrentMessage()
-        }
-
-        messageInput.setOnEditorActionListener { _, actionId, _ ->
+        send.setOnClickListener { sendCurrentMessage() }
+        input.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendCurrentMessage()
                 true
-            } else {
-                false
-            }
+            } else false
         }
 
         messagesListener = ChatManager.listenMessages(
-            uid,
-            { messages ->
+            otherUid = uid,
+            onMessages = { messages ->
+                if (activeChatUid != uid) return@listenMessages
                 messageContainer.removeAllViews()
-
                 val sorted = messages.sortedBy {
-                    it.child("timestamp")
-                        .getValue(Long::class.java) ?: 0L
+                    it.child("timestamp").getValue(Long::class.java) ?: 0L
                 }
+                sorted.forEach { snapshot ->
+                    val text = snapshot.child("text").getValue(String::class.java) ?: ""
+                    val sender = snapshot.child("senderId").getValue(String::class.java)
+                    val mine = sender == auth.currentUser?.uid
+                    val timeValue = snapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val time = if (timeValue > 0L) {
+                        SimpleDateFormat("HH:mm", Locale.getDefault())
+                            .format(Date(timeValue))
+                    } else ""
 
-                for (message in sorted) {
-                    val sender = message.child("senderId")
-                        .getValue(String::class.java) ?: ""
-
-                    val text = message.child("text")
-                        .getValue(String::class.java) ?: ""
-
-                    val timestamp = message.child("timestamp")
-                        .getValue(Long::class.java) ?: 0L
-
-                    val time = if (timestamp > 0L) {
-                        SimpleDateFormat(
-                            "HH:mm",
-                            Locale.getDefault()
-                        ).format(Date(timestamp))
-                    } else {
-                        ""
+                    val bubble = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(12), dp(8), dp(12), dp(6))
+                        background = rounded(
+                            if (mine) Color.rgb(20, 130, 85) else Color.rgb(40, 50, 63),
+                            14
+                        )
                     }
+                    bubble.addView(makeText(text, 15f, Color.WHITE))
+                    val timeText = makeText(time, 10f, Color.LTGRAY)
+                    timeText.gravity = Gravity.END
+                    bubble.addView(timeText)
 
-                    val line = TextView(this)
-                    line.text = (if (sender == auth.currentUser?.uid) {
-                        "Я: "
-                    } else {
-                        "$name: "
-                    }) + text + "   " + time
-
-                    line.textSize = 15f
-                    line.setTextColor(white)
-                    line.setPadding(dp(12), dp(9), dp(12), dp(9))
-                    line.setBackgroundColor(panel)
-
-                    val params = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    params.bottomMargin = dp(6)
-                    messageContainer.addView(line, params)
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = if (mine) Gravity.END else Gravity.START
+                        setPadding(dp(4), dp(3), dp(4), dp(3))
+                        addView(bubble, LinearLayout.LayoutParams(-2, -2))
+                    }
+                    messageContainer.addView(row)
                 }
-
-                messageScroll.post {
-                    messageScroll.fullScroll(View.FOCUS_DOWN)
-                }
+                messageScroll.post { messageScroll.fullScroll(View.FOCUS_DOWN) }
             },
-            { error ->
-                toast(error)
-            }
+            onError = { message -> toast(message) }
         )
     }
 
-    private fun clearChatListener() {
+    private fun clearMessagesListener() {
+        val uid = activeChatUid
         val listener = messagesListener
-        if (listener != null && activeChatUid.isNotEmpty()) {
-            ChatManager.removeMessagesListener(activeChatUid, listener)
+        if (uid != null && listener != null) {
+            ChatManager.removeMessagesListener(uid, listener)
         }
         messagesListener = null
     }
 
-    private fun clearHomeListeners() {
-        val chatListener = chatListListener
-        if (chatListener != null) {
-            ChatListManager.removeListener(chatListener)
-        }
-        chatListListener = null
-
-        val userListener = usersListener
-        if (userListener != null) {
-            db.child("users").removeEventListener(userListener)
-        }
-        usersListener = null
-    }
-
     private fun clearAllListeners() {
-        clearChatListener()
-        clearHomeListeners()
+        clearMessagesListener()
+        chatListListener?.let { ChatListManager.removeListener(it) }
+        chatListListener = null
     }
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
-    @Deprecated("Deprecated in Android")
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (auth.currentUser != null) {
+        if (activeChatUid != null) {
             showHome()
         } else {
             super.onBackPressed()
