@@ -1,4 +1,4 @@
-  
+
 package com.stalkergram.app
 
 import android.app.Activity
@@ -28,6 +28,7 @@ class MainActivity : Activity() {
     private lateinit var root: LinearLayout
 
     private val users = mutableListOf<UserItem>()
+
     private var chatListListener: ValueEventListener? = null
     private var messagesListener: ValueEventListener? = null
     private var activeChatUid: String? = null
@@ -37,7 +38,8 @@ class MainActivity : Activity() {
 
     private data class UserItem(
         val uid: String,
-        val username: String
+        val username: String,
+        val handle: String
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -135,6 +137,7 @@ class MainActivity : Activity() {
         chatListListener?.let {
             ChatListManager.removeListener(it)
         }
+
         chatListListener = null
 
         val uid = activeChatUid
@@ -148,7 +151,7 @@ class MainActivity : Activity() {
         activeChatUid = null
     }
 
-    // Фотография профиля
+    // ФОТОГРАФИЯ ПРОФИЛЯ
 
     private fun chooseProfilePhoto() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -215,11 +218,9 @@ class MainActivity : Activity() {
                 return
             }
 
-            val maxSize = 256
-
             val scale = minOf(
-                maxSize.toFloat() / bitmap.width,
-                maxSize.toFloat() / bitmap.height,
+                256f / bitmap.width,
+                256f / bitmap.height,
                 1f
             )
 
@@ -249,12 +250,10 @@ class MainActivity : Activity() {
                 .setValue(encoded)
                 .addOnSuccessListener {
                     toast("Фото профиля сохранено! 💚")
-                    showHome()
+                    showProfile()
                 }
                 .addOnFailureListener {
-                    toast(
-                        it.message ?: "Ошибка сохранения фотографии"
-                    )
+                    toast(it.message ?: "Ошибка сохранения фотографии")
                 }
 
             if (bitmap != resized) {
@@ -298,16 +297,13 @@ class MainActivity : Activity() {
             Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG
         )
 
-        val src = Rect(
-            left,
-            top,
-            left + size,
-            top + size
+        canvas.drawBitmap(
+            source,
+            Rect(left, top, left + size, top + size),
+            Rect(0, 0, size, size),
+            paint
         )
 
-        val dst = Rect(0, 0, size, size)
-
-        canvas.drawBitmap(source, src, dst, paint)
         canvas.restore()
 
         return result
@@ -351,7 +347,6 @@ class MainActivity : Activity() {
                             bitmap.recycle()
 
                         } catch (_: Exception) {
-                            // Оставляем инициалы
                         }
                     }
 
@@ -360,7 +355,447 @@ class MainActivity : Activity() {
             )
     }
 
-    // Авторизация
+    // ПРОФИЛЬ
+
+    private fun showProfile() {
+        clearAllListeners()
+        newRoot()
+
+        val uid = auth.currentUser?.uid ?: return
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val back = Button(this).apply {
+            text = "‹"
+            textSize = 30f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.ColorDrawable(
+                Color.TRANSPARENT
+            )
+            setOnClickListener {
+                showHome()
+            }
+        }
+
+        header.addView(
+            back,
+            LinearLayout.LayoutParams(dp(48), dp(48))
+        )
+
+        header.addView(
+            makeText("Профиль", 21f, Color.WHITE, true),
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
+
+        root.addView(header)
+
+        addGap(25)
+
+        val avatar = makeAvatar("Я")
+
+        val avatarParams = LinearLayout.LayoutParams(
+            dp(116),
+            dp(116)
+        )
+
+        avatarParams.gravity = Gravity.CENTER_HORIZONTAL
+
+        root.addView(avatar, avatarParams)
+        loadAvatar(uid, avatar)
+
+        avatar.setOnClickListener {
+            chooseProfilePhoto()
+        }
+
+        addGap(14)
+
+        val nameText = makeText(
+            "Загрузка...",
+            24f,
+            Color.WHITE,
+            true
+        )
+
+        nameText.gravity = Gravity.CENTER
+
+        root.addView(nameText)
+
+        val handleText = makeText(
+            "@username",
+            17f,
+            Color.rgb(25, 220, 130),
+            true
+        )
+
+        handleText.gravity = Gravity.CENTER
+
+        root.addView(handleText)
+
+        addGap(8)
+
+        val info = makeText(
+            "STALKERGRAM",
+            11f,
+            Color.GRAY,
+            true
+        )
+
+        info.gravity = Gravity.CENTER
+        root.addView(info)
+
+        addGap(35)
+
+        val photoButton = makeButton("📷  Изменить фотографию")
+
+        root.addView(
+            photoButton,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        addGap(12)
+
+        val nameButton = makeButton("✏️  Изменить имя")
+
+        root.addView(
+            nameButton,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        addGap(12)
+
+        val handleButton = makeButton(" @  Изменить username")
+
+        root.addView(
+            handleButton,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        addGap(20)
+
+        val backHome = Button(this).apply {
+            text = "Вернуться в чаты"
+            isAllCaps = false
+            setTextColor(Color.rgb(25, 220, 130))
+            background = android.graphics.drawable.ColorDrawable(
+                Color.TRANSPARENT
+            )
+            setOnClickListener {
+                showHome()
+            }
+        }
+
+        root.addView(
+            backHome,
+            LinearLayout.LayoutParams(-1, dp(48))
+        )
+
+        db.child("users").child(uid)
+            .addListenerForSingleValueEvent(
+                object : ValueEventListener {
+
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val name = snapshot.child("username")
+                            .getValue(String::class.java)
+                            ?: "Пользователь"
+
+                        val handle = snapshot.child("handle")
+                            .getValue(String::class.java)
+
+                        nameText.text = name
+
+                        handleText.text = if (handle.isNullOrBlank()) {
+                            "@username не задан"
+                        } else {
+                            "@$handle"
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        toast(error.message)
+                    }
+                }
+            )
+
+        photoButton.setOnClickListener {
+            chooseProfilePhoto()
+        }
+
+        nameButton.setOnClickListener {
+            showEditName()
+        }
+
+        handleButton.setOnClickListener {
+            showEditHandle()
+        }
+    }
+
+    // ИЗМЕНЕНИЕ ИМЕНИ
+
+    private fun showEditName() {
+        clearAllListeners()
+        newRoot()
+
+        val back = makeButton("‹  Назад")
+
+        root.addView(
+            back,
+            LinearLayout.LayoutParams(-1, dp(48))
+        )
+
+        back.setOnClickListener {
+            showProfile()
+        }
+
+        addGap(25)
+
+        root.addView(
+            makeText("Изменить имя", 24f, Color.WHITE, true)
+        )
+
+        addGap(15)
+
+        val input = makeInput("Новое имя")
+
+        root.addView(
+            input,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        addGap(18)
+
+        val save = makeButton("Сохранить имя")
+
+        root.addView(
+            save,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        val uid = auth.currentUser?.uid ?: return
+
+        db.child("users").child(uid).child("username")
+            .get()
+            .addOnSuccessListener {
+                input.setText(it.getValue(String::class.java) ?: "")
+            }
+
+        save.setOnClickListener {
+            val name = input.text.toString().trim()
+
+            if (name.length < 2) {
+                toast("Имя должно содержать минимум 2 символа")
+                return@setOnClickListener
+            }
+
+            if (name.length > 30) {
+                toast("Имя слишком длинное")
+                return@setOnClickListener
+            }
+
+            save.isEnabled = false
+
+            db.child("users")
+                .child(uid)
+                .child("username")
+                .setValue(name)
+                .addOnSuccessListener {
+                    toast("Имя изменено! 💚")
+                    showProfile()
+                }
+                .addOnFailureListener {
+                    save.isEnabled = true
+                    toast(it.message ?: "Ошибка изменения имени")
+                }
+        }
+    }
+
+    // ИЗМЕНЕНИЕ УНИКАЛЬНОГО USERNAME
+
+    private fun showEditHandle() {
+        clearAllListeners()
+        newRoot()
+
+        val back = makeButton("‹  Назад")
+
+        root.addView(
+            back,
+            LinearLayout.LayoutParams(-1, dp(48))
+        )
+
+        back.setOnClickListener {
+            showProfile()
+        }
+
+        addGap(25)
+
+        root.addView(
+            makeText("Твой username", 24f, Color.WHITE, true)
+        )
+
+        addGap(10)
+
+        root.addView(
+            makeText(
+                "От 3 до 20 символов. Только английские буквы, цифры и знак _",
+                13f,
+                Color.LTGRAY
+            )
+        )
+
+        addGap(15)
+
+        val input = makeInput("@username")
+
+        root.addView(
+            input,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        addGap(18)
+
+        val save = makeButton("Сохранить username")
+
+        root.addView(
+            save,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        val uid = auth.currentUser?.uid ?: return
+
+        db.child("users").child(uid).child("handle")
+            .get()
+            .addOnSuccessListener {
+                val old = it.getValue(String::class.java)
+
+                if (!old.isNullOrBlank()) {
+                    input.setText(old)
+                }
+            }
+
+        save.setOnClickListener {
+            val handle = input.text.toString()
+                .trim()
+                .removePrefix("@")
+                .lowercase(Locale.US)
+
+            if (!handle.matches(Regex("^[a-z0-9_]{3,20}$"))) {
+                toast("Используй 3–20 английских букв, цифр или _")
+                return@setOnClickListener
+            }
+
+            save.isEnabled = false
+
+            db.child("users").child(uid).child("handle")
+                .get()
+                .addOnSuccessListener { oldSnapshot ->
+
+                    val oldHandle =
+                        oldSnapshot.getValue(String::class.java)
+
+                    if (oldHandle == handle) {
+                        save.isEnabled = true
+                        toast("Этот username уже установлен")
+                        return@addOnSuccessListener
+                    }
+
+                    val usernameRef = db.child("usernames")
+                        .child(handle)
+
+                    usernameRef.runTransaction(
+                        object : Transaction.Handler {
+
+                            override fun doTransaction(
+                                currentData: MutableData
+                            ): Transaction.Result {
+
+                                val existingUid =
+                                    currentData.getValue(String::class.java)
+
+                                if (
+                                    existingUid != null &&
+                                    existingUid != uid
+                                ) {
+                                    return Transaction.abort()
+                                }
+
+                                currentData.value = uid
+
+                                return Transaction.success(currentData)
+                            }
+
+                            override fun onComplete(
+                                error: DatabaseError?,
+                                committed: Boolean,
+                                currentData: DataSnapshot?
+                            ) {
+                                if (error != null) {
+                                    save.isEnabled = true
+                                    toast(
+                                        error.message
+                                            ?: "Ошибка проверки username"
+                                    )
+                                    return
+                                }
+
+                                if (!committed) {
+                                    save.isEnabled = true
+                                    toast("Этот username уже занят")
+                                    return
+                                }
+
+                                db.child("users")
+                                    .child(uid)
+                                    .child("handle")
+                                    .setValue(handle)
+                                    .addOnSuccessListener {
+
+                                        if (
+                                            !oldHandle.isNullOrBlank() &&
+                                            oldHandle != handle
+                                        ) {
+                                            db.child("usernames")
+                                                .child(oldHandle)
+                                                .removeValue()
+                                        }
+
+                                        toast("Username сохранён! 💚")
+                                        showProfile()
+                                    }
+                                    .addOnFailureListener {
+
+                                        usernameRef.get()
+                                            .addOnSuccessListener { snapshot ->
+
+                                                if (
+                                                    snapshot.getValue(
+                                                        String::class.java
+                                                    ) == uid
+                                                ) {
+                                                    usernameRef.removeValue()
+                                                }
+                                            }
+
+                                        save.isEnabled = true
+                                        toast(
+                                            it.message
+                                                ?: "Ошибка сохранения username"
+                                        )
+                                    }
+                            }
+                        }
+                    )
+                }
+                .addOnFailureListener {
+                    save.isEnabled = true
+                    toast(it.message ?: "Ошибка получения профиля")
+                }
+        }
+    }
+
+    // АВТОРИЗАЦИЯ
 
     private fun showAuth(registerMode: Boolean) {
         clearAllListeners()
@@ -547,7 +982,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // Главный экран
+    // ГЛАВНЫЙ ЭКРАН
 
     private fun showHome() {
         clearAllListeners()
@@ -584,7 +1019,7 @@ class MainActivity : Activity() {
             loadAvatar(myUid, myAvatar)
 
             myAvatar.setOnClickListener {
-                chooseProfilePhoto()
+                showProfile()
             }
         }
 
@@ -609,7 +1044,7 @@ class MainActivity : Activity() {
 
         root.addView(
             makeText(
-                "Нажми на свой аватар, чтобы изменить фото",
+                "Нажми на аватар, чтобы открыть профиль",
                 11f,
                 Color.GRAY
             )
@@ -617,7 +1052,7 @@ class MainActivity : Activity() {
 
         addGap(8)
 
-        val search = makeInput("Поиск пользователей")
+        val search = makeInput("Поиск по имени или @username")
 
         root.addView(
             search,
@@ -705,7 +1140,7 @@ class MainActivity : Activity() {
         loadChats(chatsContainer)
     }
 
-    // Пользователи
+    // ПОЛЬЗОВАТЕЛИ И ПОИСК
 
     private fun loadUsers(container: LinearLayout) {
         val myUid = auth.currentUser?.uid ?: return
@@ -728,8 +1163,13 @@ class MainActivity : Activity() {
                                     .getValue(String::class.java)
                                 ?: "Пользователь"
 
+                        val handle =
+                            child.child("handle")
+                                .getValue(String::class.java)
+                                ?: ""
+
                         users.add(
-                            UserItem(uid, username)
+                            UserItem(uid, username, handle)
                         )
                     }
 
@@ -750,9 +1190,16 @@ class MainActivity : Activity() {
     private fun renderUsers(container: LinearLayout) {
         container.removeAllViews()
 
+        val query = searchQuery.trim()
+            .removePrefix("@")
+
         val filtered = users.filter {
             it.username.contains(
                 searchQuery,
+                ignoreCase = true
+            ) ||
+            it.handle.contains(
+                query,
                 ignoreCase = true
             )
         }
@@ -775,10 +1222,16 @@ class MainActivity : Activity() {
 
         filtered.forEach { user ->
 
+            val display = if (user.handle.isNotBlank()) {
+                "${user.username}  •  @${user.handle}"
+            } else {
+                user.username
+            }
+
             container.addView(
                 makeListItem(
                     user.uid,
-                    user.username,
+                    display,
                     "Начать переписку",
                     null
                 ) {
@@ -788,7 +1241,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // Список чатов
+    // СПИСОК ЧАТОВ
 
     private fun loadChats(container: LinearLayout) {
         chatListListener = ChatListManager.listenChats(
@@ -844,7 +1297,7 @@ class MainActivity : Activity() {
         )
     }
 
-    // Аватары и элементы списка
+    // АВАТАРЫ И ЭЛЕМЕНТЫ СПИСКА
 
     private fun makeAvatar(name: String): TextView {
         val initial = name.trim()
@@ -936,11 +1389,7 @@ class MainActivity : Activity() {
             item.addView(timeText)
         }
 
-        val params = LinearLayout.LayoutParams(
-            -1,
-            -2
-        )
-
+        val params = LinearLayout.LayoutParams(-1, -2)
         params.bottomMargin = dp(7)
 
         item.layoutParams = params
@@ -948,7 +1397,7 @@ class MainActivity : Activity() {
         return item
     }
 
-    // Открытие переписки
+    // ОТКРЫТИЕ ПЕРЕПИСКИ
 
     private fun openChat(
         otherUid: String,
@@ -1182,19 +1631,12 @@ class MainActivity : Activity() {
 
                     row.addView(
                         bubble,
-                        LinearLayout.LayoutParams(
-                            -2,
-                            -2
-                        ).apply {
+                        LinearLayout.LayoutParams(-2, -2).apply {
                             width = dp(270)
                         }
                     )
 
-                    val rowParams = LinearLayout.LayoutParams(
-                        -1,
-                        -2
-                    )
-
+                    val rowParams = LinearLayout.LayoutParams(-1, -2)
                     rowParams.bottomMargin = dp(7)
 
                     messagesContainer.addView(row, rowParams)
@@ -1215,4 +1657,3 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 }
-                  
