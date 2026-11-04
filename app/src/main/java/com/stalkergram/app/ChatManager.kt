@@ -9,11 +9,7 @@ object ChatManager {
     private val auth = FirebaseAuth.getInstance()
 
     private fun chatId(uid1: String, uid2: String): String {
-        return if (uid1 < uid2) {
-            "${uid1}_${uid2}"
-        } else {
-            "${uid2}_${uid1}"
-        }
+        return if (uid1 < uid2) "${uid1}_${uid2}" else "${uid2}_${uid1}"
     }
 
     fun sendMessage(
@@ -22,18 +18,19 @@ object ChatManager {
         callback: (Boolean, String) -> Unit
     ) {
         val senderUid = auth.currentUser?.uid
-
         if (senderUid == null) {
             callback(false, "Сначала войди в аккаунт")
             return
         }
 
         val id = chatId(senderUid, receiverUid)
-        val messageId = db.child("chats")
-            .child(id)
-            .child("messages")
-            .push()
-            .key ?: return callback(false, "Ошибка создания сообщения")
+        val messageId = db.child("chats").child(id)
+            .child("messages").push().key
+
+        if (messageId == null) {
+            callback(false, "Не удалось создать сообщение")
+            return
+        }
 
         val message = mapOf(
             "id" to messageId,
@@ -45,16 +42,13 @@ object ChatManager {
             "read" to false
         )
 
-        db.child("chats")
-            .child(id)
-            .child("messages")
-            .child(messageId)
-            .setValue(message)
+        db.child("chats").child(id).child("messages")
+            .child(messageId).setValue(message)
             .addOnSuccessListener {
                 callback(true, "Сообщение отправлено")
             }
             .addOnFailureListener {
-                callback(false, it.message ?: "Не удалось отправить сообщение")
+                callback(false, it.message ?: "Ошибка отправки")
             }
     }
 
@@ -64,7 +58,6 @@ object ChatManager {
         callback: (Boolean, String) -> Unit
     ) {
         val senderUid = auth.currentUser?.uid
-
         if (senderUid == null) {
             callback(false, "Сначала войди в аккаунт")
             return
@@ -76,11 +69,13 @@ object ChatManager {
         }
 
         val id = chatId(senderUid, receiverUid)
-        val messageId = db.child("chats")
-            .child(id)
-            .child("messages")
-            .push()
-            .key ?: return callback(false, "Ошибка создания сообщения")
+        val messageId = db.child("chats").child(id)
+            .child("messages").push().key
+
+        if (messageId == null) {
+            callback(false, "Не удалось создать сообщение")
+            return
+        }
 
         val message = mapOf(
             "id" to messageId,
@@ -93,16 +88,13 @@ object ChatManager {
             "read" to false
         )
 
-        db.child("chats")
-            .child(id)
-            .child("messages")
-            .child(messageId)
-            .setValue(message)
+        db.child("chats").child(id).child("messages")
+            .child(messageId).setValue(message)
             .addOnSuccessListener {
                 callback(true, "Фотография отправлена 💚")
             }
             .addOnFailureListener {
-                callback(false, it.message ?: "Не удалось отправить фотографию")
+                callback(false, it.message ?: "Ошибка отправки фотографии")
             }
     }
 
@@ -110,9 +102,7 @@ object ChatManager {
         val myUid = auth.currentUser?.uid ?: return
         val id = chatId(myUid, otherUid)
 
-        db.child("chats")
-            .child(id)
-            .child("messages")
+        db.child("chats").child(id).child("messages")
             .get()
             .addOnSuccessListener { snapshot ->
                 for (message in snapshot.children) {
@@ -131,15 +121,32 @@ object ChatManager {
 
     fun listenMessages(
         otherUid: String,
-        listener: ValueEventListener
-    ) {
-        val myUid = auth.currentUser?.uid ?: return
+        onMessages: (List<DataSnapshot>) -> Unit,
+        onError: (String) -> Unit
+    ): ValueEventListener {
+        val myUid = auth.currentUser?.uid
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                onMessages(snapshot.children.toList())
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                onError(error.message)
+            }
+        }
+
+        if (myUid == null) {
+            onError("Сначала войди в аккаунт")
+            return listener
+        }
+
         val id = chatId(myUid, otherUid)
 
-        db.child("chats")
-            .child(id)
-            .child("messages")
+        db.child("chats").child(id).child("messages")
             .addValueEventListener(listener)
+
+        return listener
     }
 
     fun removeMessagesListener(
@@ -149,9 +156,7 @@ object ChatManager {
         val myUid = auth.currentUser?.uid ?: return
         val id = chatId(myUid, otherUid)
 
-        db.child("chats")
-            .child(id)
-            .child("messages")
+        db.child("chats").child(id).child("messages")
             .removeEventListener(listener)
     }
 }
