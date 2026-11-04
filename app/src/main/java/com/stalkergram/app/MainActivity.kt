@@ -3,7 +3,10 @@ package com.stalkergram.app
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
+import android.net.Uri
 import android.graphics.*
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
@@ -19,6 +22,8 @@ import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.net.URL
+import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
 
@@ -28,8 +33,6 @@ class MainActivity : Activity() {
     private val prefs by lazy {
         getSharedPreferences("stalkergram_settings", MODE_PRIVATE)
     }
-
-    // MODERN STALKERGRAM COLORS
 
     private val bg = Color.rgb(18, 22, 29)
     private val panel = Color.rgb(29, 35, 44)
@@ -55,6 +58,12 @@ class MainActivity : Activity() {
     private var selectedSection = 0
 
     private val PICK_IMAGE_REQUEST = 1001
+    private val PICK_CHAT_IMAGE_REQUEST = 1002
+
+    private var pendingChatImageUid: String? = null
+
+    private val imageExecutor = Executors.newSingleThreadExecutor()
+    private val imageHandler = Handler(Looper.getMainLooper())
 
     private data class UserItem(
         val uid: String,
@@ -99,8 +108,7 @@ class MainActivity : Activity() {
             text = value
             textSize = size
             setTextColor(color)
-            typeface = if (bold) Typeface.DEFAULT_BOLD
-            else Typeface.DEFAULT
+            typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         }
     }
 
@@ -157,7 +165,10 @@ class MainActivity : Activity() {
         parent.addView(line, params)
     }
 
-    private fun header(title: String, subtitle: String = "StalkerGram"): LinearLayout {
+    private fun header(
+        title: String,
+        subtitle: String = "StalkerGram"
+    ): LinearLayout {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), dp(10), dp(4), dp(12))
@@ -188,7 +199,7 @@ class MainActivity : Activity() {
         activeChatUid = null
     }
 
-    // AVATARS
+    // АВАТАРЫ
 
     private fun makeAvatar(name: String, size: Int = 52): TextView {
         val initial = name.trim().firstOrNull()?.toString()
@@ -258,7 +269,6 @@ class MainActivity : Activity() {
 
                     try {
                         val bytes = Base64.decode(encoded, Base64.DEFAULT)
-
                         val bitmap = BitmapFactory.decodeByteArray(
                             bytes, 0, bytes.size
                         ) ?: return
@@ -277,6 +287,8 @@ class MainActivity : Activity() {
             })
     }
 
+    // ВЫБОР ФОТО ПРОФИЛЯ
+
     private fun chooseProfilePhoto() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "image/*"
@@ -288,7 +300,22 @@ class MainActivity : Activity() {
         )
     }
 
-    @Deprecated("Используется для выбора фотографии")
+    // ВЫБОР ФОТО ДЛЯ ЧАТА
+
+    private fun chooseChatImage(receiverUid: String) {
+        pendingChatImageUid = receiverUid
+
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "image/*"
+        }
+
+        startActivityForResult(
+            Intent.createChooser(intent, "Выбери фотографию"),
+            PICK_CHAT_IMAGE_REQUEST
+        )
+    }
+
+    @Deprecated("Используется для выбора фотографий")
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
@@ -296,14 +323,33 @@ class MainActivity : Activity() {
     ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK) {
-            data?.data?.let {
-                saveProfilePhoto(it)
+        if (resultCode != RESULT_OK) return
+
+        val uri = data?.data ?: return
+
+        when (requestCode) {
+            PICK_IMAGE_REQUEST -> {
+                saveProfilePhoto(uri)
+            }
+
+            PICK_CHAT_IMAGE_REQUEST -> {
+                val receiverUid = pendingChatImageUid
+                pendingChatImageUid = null
+
+                if (receiverUid != null) {
+                    toast("Отправляем фотографию...")
+
+                    ChatManager.sendImage(receiverUid, uri) { success, message ->
+                        runOnUiThread {
+                            toast(message)
+                        }
+                    }
+                }
             }
         }
     }
 
-    private fun saveProfilePhoto(uri: android.net.Uri) {
+    private fun saveProfilePhoto(uri: Uri) {
         val uid = auth.currentUser?.uid ?: return
 
         try {
@@ -350,7 +396,39 @@ class MainActivity : Activity() {
         }
     }
 
-    // BOTTOM NAVIGATION
+    // ЗАГРУЗКА ФОТОГРАФИИ ИЗ ЧАТА
+
+    private fun loadChatImage(url: String, imageView: ImageView) {
+        imageView.tag = url
+
+        imageExecutor.execute {
+            try {
+                val connection = URL(url).openConnection()
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+
+                val bitmap = connection.getInputStream().use {
+                    BitmapFactory.decodeStream(it)
+                }
+
+                imageHandler.post {
+                    if (imageView.tag == url && bitmap != null) {
+                        imageView.setImageBitmap(bitmap)
+                    }
+                }
+            } catch (_: Exception) {
+                imageHandler.post {
+                    if (imageView.tag == url) {
+                        imageView.setImageResource(
+                            android.R.drawable.ic_menu_report_image
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // НИЖНЯЯ НАВИГАЦИЯ
 
     private fun addBottomNavigation(selected: Int) {
         val navigation = LinearLayout(this).apply {
@@ -425,7 +503,7 @@ class MainActivity : Activity() {
         root.addView(navigation, params)
     }
 
-    // HOME
+    // ГЛАВНЫЙ ЭКРАН
 
     private fun showHome() {
         clearAllListeners()
@@ -449,6 +527,7 @@ class MainActivity : Activity() {
         add.gravity = Gravity.CENTER
 
         top.addView(add, LinearLayout.LayoutParams(dp(45), dp(45)))
+
         add.setOnClickListener {
             showContacts()
         }
@@ -481,8 +560,7 @@ class MainActivity : Activity() {
 
         addGap(10)
 
-        val storiesTitle = makeText("Истории", 17f, textColor, true)
-        root.addView(storiesTitle)
+        root.addView(makeText("Истории", 17f, textColor, true))
 
         addGap(7)
 
@@ -588,11 +666,10 @@ class MainActivity : Activity() {
         )
 
         loadChats(chatsContainer)
-
         addBottomNavigation(0)
     }
 
-    // CREATE CHANNEL
+    // СОЗДАНИЕ КАНАЛА
 
     private fun showCreateChannel() {
         val uid = auth.currentUser?.uid ?: return
@@ -644,7 +721,7 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // FAVORITES
+    // ИЗБРАННОЕ
 
     private fun showFavorites() {
         clearAllListeners()
@@ -664,7 +741,6 @@ class MainActivity : Activity() {
         )
 
         root.addView(card)
-
         addGap(15)
 
         val back = makeButton("Вернуться в чаты")
@@ -679,7 +755,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // CHAT LIST
+    // СПИСОК ЧАТОВ
 
     private fun loadChats(container: LinearLayout) {
         renderChats = null
@@ -784,9 +860,7 @@ class MainActivity : Activity() {
             setPadding(dp(12), 0, dp(4), 0)
         }
 
-        texts.addView(
-            makeText(name, 16f, textColor, true)
-        )
+        texts.addView(makeText(name, 16f, textColor, true))
 
         val messageText = makeText(message, 13f, muted)
         messageText.maxLines = 1
@@ -833,13 +907,12 @@ class MainActivity : Activity() {
 
         val params = LinearLayout.LayoutParams(-1, -2)
         params.bottomMargin = dp(2)
-
         item.layoutParams = params
 
         return item
     }
 
-    // CONTACTS
+    // КОНТАКТЫ
 
     private fun showContacts() {
         clearAllListeners()
@@ -850,7 +923,6 @@ class MainActivity : Activity() {
         newRoot()
 
         root.addView(header("Контакты", "Найди людей в StalkerGram"))
-
         addGap(5)
 
         val search = makeInput("Поиск по имени или @username")
@@ -905,7 +977,6 @@ class MainActivity : Activity() {
 
                     for (child in snapshot.children) {
                         val uid = child.key ?: continue
-
                         if (uid == myUid) continue
 
                         val username = child.child("username")
@@ -917,9 +988,7 @@ class MainActivity : Activity() {
                         val handle = child.child("handle")
                             .getValue(String::class.java) ?: ""
 
-                        users.add(
-                            UserItem(uid, username, handle)
-                        )
+                        users.add(UserItem(uid, username, handle))
                     }
 
                     users.sortBy {
@@ -979,11 +1048,10 @@ class MainActivity : Activity() {
         }
     }
 
-    // CHAT SCREEN
+    // ЭКРАН ЧАТА
 
     private fun openChat(otherUid: String, username: String) {
         clearAllListeners()
-
         activeChatUid = otherUid
 
         newRoot()
@@ -1025,13 +1093,8 @@ class MainActivity : Activity() {
             setPadding(dp(10), 0, 0, 0)
         }
 
-        titleBox.addView(
-            makeText(username, 16f, textColor, true)
-        )
-
-        titleBox.addView(
-            makeText("StalkerGram", 11f, green)
-        )
+        titleBox.addView(makeText(username, 16f, textColor, true))
+        titleBox.addView(makeText("StalkerGram", 11f, green))
 
         headerBox.addView(
             titleBox,
@@ -1039,7 +1102,6 @@ class MainActivity : Activity() {
         )
 
         root.addView(headerBox)
-
         addGap(7)
 
         val scroll = ScrollView(this)
@@ -1056,10 +1118,29 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, 0, 1f)
         )
 
+        // ПАНЕЛЬ ВВОДА И СКРЕПКА
+
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(7), 0, 0)
+        }
+
+        val attachButton = TextView(this).apply {
+            text = "📎"
+            textSize = 23f
+            gravity = Gravity.CENTER
+            setTextColor(greenLight)
+            background = rounded(panel, 14)
+        }
+
+        bottom.addView(
+            attachButton,
+            LinearLayout.LayoutParams(dp(45), dp(49))
+        )
+
+        attachButton.setOnClickListener {
+            chooseChatImage(otherUid)
         }
 
         val messageInput = makeInput("Сообщение...")
@@ -1067,10 +1148,10 @@ class MainActivity : Activity() {
         messageInput.inputType = 1
         messageInput.imeOptions = EditorInfo.IME_ACTION_SEND
 
-        bottom.addView(
-            messageInput,
-            LinearLayout.LayoutParams(0, dp(49), 1f)
-        )
+        val inputParams = LinearLayout.LayoutParams(0, dp(49), 1f)
+        inputParams.leftMargin = dp(6)
+
+        bottom.addView(messageInput, inputParams)
 
         val sendButton = TextView(this).apply {
             text = "➤"
@@ -1088,18 +1169,19 @@ class MainActivity : Activity() {
 
         fun sendCurrentMessage() {
             val message = messageInput.text.toString().trim()
-
             if (message.isBlank()) return
 
             sendButton.isEnabled = false
 
             ChatManager.sendMessage(otherUid, message) { success, result ->
-                sendButton.isEnabled = true
+                runOnUiThread {
+                    sendButton.isEnabled = true
 
-                if (success) {
-                    messageInput.text.clear()
-                } else {
-                    toast(result)
+                    if (success) {
+                        messageInput.text.clear()
+                    } else {
+                        toast(result)
+                    }
                 }
             }
         }
@@ -1117,6 +1199,8 @@ class MainActivity : Activity() {
             }
         }
 
+        // ПОЛУЧЕНИЕ СООБЩЕНИЙ
+
         messagesListener = ChatManager.listenMessages(
             otherUid,
 
@@ -1125,12 +1209,7 @@ class MainActivity : Activity() {
                 messagesContainer.removeAllViews()
 
                 if (messages.isEmpty()) {
-                    val empty = makeText(
-                        "Начни общение!",
-                        14f,
-                        muted
-                    )
-
+                    val empty = makeText("Начни общение!", 14f, muted)
                     empty.gravity = Gravity.CENTER
 
                     messagesContainer.addView(
@@ -1154,11 +1233,17 @@ class MainActivity : Activity() {
                         val messageText = snapshot.child("text")
                             .getValue(String::class.java) ?: ""
 
+                        val imageUrl = snapshot.child("imageUrl")
+                            .getValue(String::class.java) ?: ""
+
+                        val messageType = snapshot.child("type")
+                            .getValue(String::class.java) ?: "text"
+
                         val timestamp = snapshot.child("timestamp")
                             .getValue(Long::class.java) ?: 0L
 
-                        val status = snapshot.child("status")
-                            .getValue(String::class.java) ?: "sent"
+                        val isRead = snapshot.child("read")
+                            .getValue(Boolean::class.java) == true
 
                         val isMine = senderId == myUid
 
@@ -1173,9 +1258,30 @@ class MainActivity : Activity() {
                             )
                         }
 
-                        bubble.addView(
-                            makeText(messageText, 15f, textColor)
-                        )
+                        if (messageType == "image" && imageUrl.isNotBlank()) {
+
+                            val photo = ImageView(this).apply {
+                                scaleType = ImageView.ScaleType.CENTER_CROP
+                                background = rounded(panelLight, 12)
+                                clipToOutline = true
+                                setImageResource(
+                                    android.R.drawable.ic_menu_gallery
+                                )
+                            }
+
+                            bubble.addView(
+                                photo,
+                                LinearLayout.LayoutParams(dp(220), dp(220))
+                            )
+
+                            loadChatImage(imageUrl, photo)
+
+                        } else if (messageText.isNotBlank()) {
+
+                            bubble.addView(
+                                makeText(messageText, 15f, textColor)
+                            )
+                        }
 
                         val time = if (timestamp > 0L) {
                             SimpleDateFormat(
@@ -1187,7 +1293,7 @@ class MainActivity : Activity() {
                         }
 
                         val meta = if (isMine) {
-                            val ticks = if (status == "read") "✓✓" else "✓"
+                            val ticks = if (isRead) "✓✓" else "✓"
                             "$time   $ticks"
                         } else {
                             time
@@ -1196,11 +1302,7 @@ class MainActivity : Activity() {
                         val timeText = makeText(
                             meta,
                             10f,
-                            if (isMine && status == "read") {
-                                greenLight
-                            } else {
-                                muted
-                            }
+                            if (isMine && isRead) greenLight else muted
                         )
 
                         timeText.gravity = Gravity.END
@@ -1208,11 +1310,7 @@ class MainActivity : Activity() {
 
                         val row = LinearLayout(this).apply {
                             orientation = LinearLayout.HORIZONTAL
-                            gravity = if (isMine) {
-                                Gravity.END
-                            } else {
-                                Gravity.START
-                            }
+                            gravity = if (isMine) Gravity.END else Gravity.START
                         }
 
                         row.addView(
@@ -1242,9 +1340,11 @@ class MainActivity : Activity() {
                 toast(message)
             }
         )
+
+        ChatManager.markMessagesRead(otherUid)
     }
 
-    // PROFILE
+    // КАРТОЧКА НАСТРОЕК
 
     private fun settingsCard(): LinearLayout {
         return LinearLayout(this).apply {
@@ -1254,9 +1354,10 @@ class MainActivity : Activity() {
         }
     }
 
+    // ПРОФИЛЬ
+
     private fun showProfile() {
         clearAllListeners()
-
         selectedSection = 3
 
         newRoot()
@@ -1277,7 +1378,6 @@ class MainActivity : Activity() {
         )
 
         content.addView(header("Профиль", "Твой аккаунт StalkerGram"))
-
         addGap(8)
 
         val top = LinearLayout(this).apply {
@@ -1319,7 +1419,6 @@ class MainActivity : Activity() {
         )
 
         content.addView(top)
-
         addGap(10)
 
         val edit = makeButton("Изменить имя")
@@ -1348,7 +1447,6 @@ class MainActivity : Activity() {
         )
 
         about.setPadding(0, dp(8), 0, 0)
-
         aboutCard.addView(about)
 
         aboutCard.setOnClickListener {
@@ -1361,7 +1459,6 @@ class MainActivity : Activity() {
         }
 
         content.addView(aboutCard)
-
         addGap(8)
 
         val handleButton = makeButton("Изменить username")
@@ -1458,7 +1555,7 @@ class MainActivity : Activity() {
         addBottomNavigation(3)
     }
 
-    // PROFILE EDITING
+    // РЕДАКТИРОВАНИЕ ПРОФИЛЯ
 
     private fun showEditField(
         field: String,
@@ -1472,7 +1569,6 @@ class MainActivity : Activity() {
         val uid = auth.currentUser?.uid ?: return
 
         val back = makeText("‹  Назад", 16f, green, true)
-
         root.addView(back)
 
         back.setOnClickListener {
@@ -1480,11 +1576,7 @@ class MainActivity : Activity() {
         }
 
         addGap(20)
-
-        root.addView(
-            makeText(title, 23f, textColor, true)
-        )
-
+        root.addView(makeText(title, 23f, textColor, true))
         addGap(15)
 
         val input = makeInput(hint)
@@ -1538,7 +1630,6 @@ class MainActivity : Activity() {
         val uid = auth.currentUser?.uid ?: return
 
         val back = makeText("‹  Назад", 16f, green, true)
-
         root.addView(back)
 
         back.setOnClickListener {
@@ -1546,11 +1637,7 @@ class MainActivity : Activity() {
         }
 
         addGap(20)
-
-        root.addView(
-            makeText("Изменить имя", 23f, textColor, true)
-        )
-
+        root.addView(makeText("Изменить имя", 23f, textColor, true))
         addGap(15)
 
         val input = makeInput("Новое имя")
@@ -1603,7 +1690,6 @@ class MainActivity : Activity() {
         val uid = auth.currentUser?.uid ?: return
 
         val back = makeText("‹  Назад", 16f, green, true)
-
         root.addView(back)
 
         back.setOnClickListener {
@@ -1611,11 +1697,7 @@ class MainActivity : Activity() {
         }
 
         addGap(20)
-
-        root.addView(
-            makeText("Твой username", 23f, textColor, true)
-        )
-
+        root.addView(makeText("Твой username", 23f, textColor, true))
         addGap(12)
 
         val input = makeInput("@username")
@@ -1677,7 +1759,6 @@ class MainActivity : Activity() {
                                 }
 
                                 currentData.value = uid
-
                                 return Transaction.success(currentData)
                             }
 
@@ -1723,7 +1804,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // SETTINGS
+    // НАСТРОЙКИ
 
     private fun settingsRow(
         icon: String,
@@ -1751,13 +1832,8 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
         }
 
-        texts.addView(
-            makeText(title, 15f, textColor, true)
-        )
-
-        texts.addView(
-            makeText(subtitle, 11f, muted)
-        )
+        texts.addView(makeText(title, 15f, textColor, true))
+        texts.addView(makeText(subtitle, 11f, muted))
 
         row.addView(
             texts,
@@ -1771,15 +1847,11 @@ class MainActivity : Activity() {
 
     private fun showSettings() {
         clearAllListeners()
-
         selectedSection = 2
 
         newRoot()
 
-        root.addView(
-            header("Настройки", "Настрой StalkerGram")
-        )
-
+        root.addView(header("Настройки", "Настрой StalkerGram"))
         addGap(5)
 
         val uid = auth.currentUser?.uid ?: return
@@ -1791,7 +1863,6 @@ class MainActivity : Activity() {
 
         card.addView(name)
         card.addView(email)
-
         root.addView(card)
 
         db.child("users").child(uid)
@@ -1919,22 +1990,15 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // AUTHENTICATION
+    // АВТОРИЗАЦИЯ
 
     private fun showAuth(registerMode: Boolean) {
         clearAllListeners()
-
         newRoot()
 
         addGap(35)
 
-        val title = makeText(
-            "StalkerGram",
-            32f,
-            green,
-            true
-        )
-
+        val title = makeText("StalkerGram", 32f, green, true)
         title.gravity = Gravity.CENTER
 
         root.addView(
@@ -1943,17 +2007,13 @@ class MainActivity : Activity() {
         )
 
         val subtitle = makeText(
-            if (registerMode) {
-                "Создай новый аккаунт"
-            } else {
-                "Добро пожаловать!"
-            },
+            if (registerMode) "Создай новый аккаунт"
+            else "Добро пожаловать!",
             15f,
             muted
         )
 
         subtitle.gravity = Gravity.CENTER
-
         root.addView(subtitle)
 
         addGap(30)
@@ -1991,11 +2051,7 @@ class MainActivity : Activity() {
         addGap(20)
 
         val action = makeButton(
-            if (registerMode) {
-                "Создать аккаунт"
-            } else {
-                "Войти"
-            }
+            if (registerMode) "Создать аккаунт" else "Войти"
         )
 
         root.addView(
@@ -2107,6 +2163,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         clearAllListeners()
+        imageExecutor.shutdown()
         super.onDestroy()
     }
 }
