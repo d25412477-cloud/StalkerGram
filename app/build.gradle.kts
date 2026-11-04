@@ -29,6 +29,13 @@ android {
 
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
+
+    // Firebase Authentication
     implementation("com.google.firebase:firebase-auth")
+
+    // Firebase Realtime Database
     implementation("com.google.firebase:firebase-database")
+
+    // Firebase Storage — фотографии в чатах
+    implementation("com.google.firebase:firebase-storage")
 }
