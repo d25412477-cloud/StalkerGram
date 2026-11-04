@@ -1,3 +1,4 @@
+
 package com.stalkergram.app
 
 import com.google.firebase.auth.FirebaseAuth
@@ -9,7 +10,11 @@ object ChatManager {
     private val auth = FirebaseAuth.getInstance()
 
     private fun chatId(uid1: String, uid2: String): String {
-        return if (uid1 < uid2) "${uid1}_${uid2}" else "${uid2}_${uid1}"
+        return if (uid1 < uid2) {
+            "${uid1}_${uid2}"
+        } else {
+            "${uid2}_${uid1}"
+        }
     }
 
     fun sendMessage(
@@ -18,6 +23,7 @@ object ChatManager {
         callback: (Boolean, String) -> Unit
     ) {
         val senderUid = auth.currentUser?.uid
+
         if (senderUid == null) {
             callback(false, "Сначала войди в аккаунт")
             return
@@ -39,7 +45,8 @@ object ChatManager {
             "text" to text,
             "type" to "text",
             "timestamp" to ServerValue.TIMESTAMP,
-            "read" to false
+            "read" to false,
+            "status" to "sent"
         )
 
         db.child("chats").child(id).child("messages")
@@ -58,6 +65,7 @@ object ChatManager {
         callback: (Boolean, String) -> Unit
     ) {
         val senderUid = auth.currentUser?.uid
+
         if (senderUid == null) {
             callback(false, "Сначала войди в аккаунт")
             return
@@ -85,7 +93,8 @@ object ChatManager {
             "type" to "image",
             "imageBase64" to imageBase64,
             "timestamp" to ServerValue.TIMESTAMP,
-            "read" to false
+            "read" to false,
+            "status" to "sent"
         )
 
         db.child("chats").child(id).child("messages")
@@ -105,6 +114,7 @@ object ChatManager {
         db.child("chats").child(id).child("messages")
             .get()
             .addOnSuccessListener { snapshot ->
+
                 for (message in snapshot.children) {
                     val receiver = message.child("receiverId")
                         .getValue(String::class.java)
@@ -113,7 +123,12 @@ object ChatManager {
                         .getValue(Boolean::class.java) ?: false
 
                     if (receiver == myUid && !read) {
-                        message.ref.child("read").setValue(true)
+                        message.ref.updateChildren(
+                            mapOf(
+                                "read" to true,
+                                "status" to "read"
+                            )
+                        )
                     }
                 }
             }
@@ -124,9 +139,11 @@ object ChatManager {
         onMessages: (List<DataSnapshot>) -> Unit,
         onError: (String) -> Unit
     ): ValueEventListener {
+
         val myUid = auth.currentUser?.uid
 
         val listener = object : ValueEventListener {
+
             override fun onDataChange(snapshot: DataSnapshot) {
                 onMessages(snapshot.children.toList())
             }
