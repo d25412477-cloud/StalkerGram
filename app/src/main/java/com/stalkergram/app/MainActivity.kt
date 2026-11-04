@@ -26,7 +26,6 @@ class MainActivity : Activity() {
     private val db by lazy { FirebaseConfig.database.reference }
 
     private lateinit var root: LinearLayout
-
     private val users = mutableListOf<UserItem>()
 
     private var chatListListener: ValueEventListener? = null
@@ -62,7 +61,6 @@ class MainActivity : Activity() {
             setPadding(dp(18), dp(18), dp(18), dp(12))
             setBackgroundColor(Color.rgb(13, 18, 25))
         }
-
         setContentView(root)
         return root
     }
@@ -77,7 +75,6 @@ class MainActivity : Activity() {
             text = value
             textSize = size
             setTextColor(color)
-
             if (bold) setTypeface(null, Typeface.BOLD)
         }
     }
@@ -100,7 +97,6 @@ class MainActivity : Activity() {
             textSize = 16f
             setPadding(dp(14), dp(10), dp(14), dp(10))
             background = rounded(Color.rgb(29, 38, 49), 12)
-
             if (password) inputType = 129
         }
     }
@@ -213,7 +209,6 @@ class MainActivity : Activity() {
             )
 
             val output = java.io.ByteArrayOutputStream()
-
             resized.compress(Bitmap.CompressFormat.JPEG, 65, output)
 
             val encoded = Base64.encodeToString(
@@ -308,7 +303,7 @@ class MainActivity : Activity() {
             )
     }
 
-    // НОВЫЙ ЭКРАН ПРОФИЛЯ
+    // ПРОФИЛЬ
 
     private fun showProfile() {
         clearAllListeners()
@@ -338,7 +333,7 @@ class MainActivity : Activity() {
             )
         }
 
-        // Верхняя панель
+        // ВЕРХНЯЯ ПАНЕЛЬ
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -372,12 +367,11 @@ class MainActivity : Activity() {
         menu.gravity = Gravity.CENTER
 
         header.addView(menu, LinearLayout.LayoutParams(dp(35), dp(48)))
-
         content.addView(header)
 
         gap(22)
 
-        // Аватар и имя
+        // АВАТАР И ИМЯ
 
         val profileTop = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -398,7 +392,6 @@ class MainActivity : Activity() {
         )
 
         loadAvatar(uid, avatar)
-
         avatar.setOnClickListener { chooseProfilePhoto() }
 
         val profileText = LinearLayout(this).apply {
@@ -420,6 +413,16 @@ class MainActivity : Activity() {
             Color.rgb(100, 190, 135)
         )
 
+        status.isClickable = true
+        status.setOnClickListener {
+            showEditField(
+                "status",
+                "Мой статус",
+                "Например: На Зоне 💚",
+                60
+            )
+        }
+
         profileText.addView(nameText)
         profileText.addView(handleText)
         profileText.addView(status)
@@ -433,7 +436,7 @@ class MainActivity : Activity() {
 
         gap(28)
 
-        // Три карточки действий
+        // КАРТОЧКИ ДЕЙСТВИЙ
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -495,7 +498,7 @@ class MainActivity : Activity() {
 
         gap(22)
 
-        // Информация
+        // ИНФОРМАЦИЯ О ПРОФИЛЕ
 
         val infoCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -515,12 +518,32 @@ class MainActivity : Activity() {
             )
         )
 
+        val aboutText = makeText(
+            "О себе: расскажи немного о себе",
+            14f,
+            Color.LTGRAY
+        )
+
+        aboutText.setPadding(0, dp(12), 0, dp(8))
+        aboutText.isClickable = true
+
+        aboutText.setOnClickListener {
+            showEditField(
+                "about",
+                "Информация о себе",
+                "Расскажи немного о себе...",
+                200
+            )
+        }
+
+        infoCard.addView(aboutText)
+
         val divider = View(this).apply {
             setBackgroundColor(Color.rgb(55, 60, 65))
         }
 
         val dividerParams = LinearLayout.LayoutParams(-1, dp(1))
-        dividerParams.topMargin = dp(18)
+        dividerParams.topMargin = dp(12)
         dividerParams.bottomMargin = dp(14)
 
         infoCard.addView(divider, dividerParams)
@@ -548,12 +571,14 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, -2)
         )
 
-        // Загружаем данные
+        // ЗАГРУЗКА ДАННЫХ FIREBASE
 
         db.child("users").child(uid)
             .addListenerForSingleValueEvent(
                 object : ValueEventListener {
+
                     override fun onDataChange(snapshot: DataSnapshot) {
+
                         nameText.text =
                             snapshot.child("username")
                                 .getValue(String::class.java)
@@ -573,6 +598,24 @@ class MainActivity : Activity() {
                             snapshot.child("email")
                                 .getValue(String::class.java)
                                 ?: "Почта не указана"
+
+                        val savedStatus = snapshot.child("status")
+                            .getValue(String::class.java)
+
+                        status.text = "● " + (
+                            savedStatus?.takeIf { it.isNotBlank() }
+                                ?: "Аккаунт StalkerGram"
+                            )
+
+                        val about = snapshot.child("about")
+                            .getValue(String::class.java)
+
+                        aboutText.text =
+                            if (about.isNullOrBlank()) {
+                                "О себе: расскажи немного о себе"
+                            } else {
+                                "О себе: $about"
+                            }
                     }
 
                     override fun onCancelled(error: DatabaseError) {
@@ -593,6 +636,79 @@ class MainActivity : Activity() {
         backHome.setOnClickListener { showHome() }
 
         gap(15)
+    }
+
+    // РЕДАКТИРОВАНИЕ СТАТУСА И ИНФОРМАЦИИ
+
+    private fun showEditField(
+        field: String,
+        title: String,
+        hint: String,
+        maxLength: Int
+    ) {
+        clearAllListeners()
+        newRoot()
+
+        val uid = auth.currentUser?.uid ?: return
+
+        val back = makeButton("‹  Назад")
+        root.addView(back, LinearLayout.LayoutParams(-1, dp(48)))
+        back.setOnClickListener { showProfile() }
+
+        addGap(25)
+
+        root.addView(
+            makeText(title, 24f, Color.WHITE, true)
+        )
+
+        addGap(15)
+
+        val input = makeInput(hint)
+        input.maxLines = 5
+
+        root.addView(
+            input,
+            LinearLayout.LayoutParams(-1, dp(100))
+        )
+
+        addGap(18)
+
+        val save = makeButton("Сохранить")
+        root.addView(
+            save,
+            LinearLayout.LayoutParams(-1, dp(52))
+        )
+
+        db.child("users").child(uid).child(field)
+            .get()
+            .addOnSuccessListener {
+                input.setText(it.getValue(String::class.java) ?: "")
+            }
+            .addOnFailureListener {
+                toast("Не удалось загрузить данные")
+            }
+
+        save.setOnClickListener {
+            val value = input.text.toString().trim()
+
+            if (value.length > maxLength) {
+                toast("Максимум $maxLength символов")
+                return@setOnClickListener
+            }
+
+            save.isEnabled = false
+
+            db.child("users").child(uid).child(field)
+                .setValue(value)
+                .addOnSuccessListener {
+                    toast("Изменения сохранены! 💚")
+                    showProfile()
+                }
+                .addOnFailureListener {
+                    save.isEnabled = true
+                    toast(it.message ?: "Ошибка сохранения")
+                }
+        }
     }
 
     // ИЗМЕНЕНИЕ ИМЕНИ
@@ -736,6 +852,7 @@ class MainActivity : Activity() {
                             override fun doTransaction(
                                 currentData: MutableData
                             ): Transaction.Result {
+
                                 val existingUid =
                                     currentData.getValue(String::class.java)
 
@@ -755,6 +872,7 @@ class MainActivity : Activity() {
                                 committed: Boolean,
                                 currentData: DataSnapshot?
                             ) {
+
                                 if (error != null) {
                                     save.isEnabled = true
                                     toast(error.message)
@@ -816,7 +934,6 @@ class MainActivity : Activity() {
         )
 
         title.gravity = Gravity.CENTER
-
         root.addView(title, LinearLayout.LayoutParams(-1, dp(70)))
 
         val subtitle = makeText(
@@ -1029,7 +1146,6 @@ class MainActivity : Activity() {
         addGap(8)
 
         val search = makeInput("Поиск по имени или @username")
-
         root.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
 
         addGap(12)
