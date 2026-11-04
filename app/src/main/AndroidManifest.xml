@@ -4,8 +4,10 @@
     <application
         android:allowBackup="true"
         android:label="StalkerGram"
+        android:icon="@drawable/stalker_logo"
+        android:roundIcon="@drawable/stalker_logo"
         android:theme="@style/StalkerGramTheme"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
