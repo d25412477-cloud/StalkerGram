@@ -130,7 +130,6 @@ class MainActivity : Activity() {
             ChatListManager.removeListener(it)
         }
         chatListListener = null
-
         renderChats = null
 
         val uid = activeChatUid
@@ -507,26 +506,28 @@ class MainActivity : Activity() {
 
         gap(12)
 
-        val settingsRow = settingsRow("⚙", "Настройки", "Уведомления, тема, приватность") {
-            showSettings()
-        }
-        content.addView(settingsRow)
+        content.addView(
+            settingsRow("⚙", "Настройки", "Уведомления, тема, приватность") {
+                showSettings()
+            }
+        )
 
         gap(10)
 
-        val logout = settingsRow("↪", "Выйти из аккаунта", "Завершить текущий сеанс") {
-            AlertDialog.Builder(this)
-                .setTitle("Выйти из аккаунта?")
-                .setMessage("Ты действительно хочешь выйти?")
-                .setNegativeButton("Отмена", null)
-                .setPositiveButton("Выйти") { _, _ ->
-                    clearAllListeners()
-                    auth.signOut()
-                    showAuth(false)
-                }
-                .show()
-        }
-        content.addView(logout)
+        content.addView(
+            settingsRow("↪", "Выйти из аккаунта", "Завершить текущий сеанс") {
+                AlertDialog.Builder(this)
+                    .setTitle("Выйти из аккаунта?")
+                    .setMessage("Ты действительно хочешь выйти?")
+                    .setNegativeButton("Отмена", null)
+                    .setPositiveButton("Выйти") { _, _ ->
+                        clearAllListeners()
+                        auth.signOut()
+                        showAuth(false)
+                    }
+                    .show()
+            }
+        )
 
         db.child("users").child(uid)
             .addListenerForSingleValueEvent(object : ValueEventListener {
@@ -568,7 +569,7 @@ class MainActivity : Activity() {
         addBottomNavigation(2)
     }
 
-    // ОБЩИЕ КАРТОЧКИ НАСТРОЕК
+    // КАРТОЧКИ НАСТРОЕК
 
     private fun settingsCard(): LinearLayout {
         return LinearLayout(this).apply {
@@ -638,7 +639,7 @@ class MainActivity : Activity() {
         root.addView(header)
     }
 
-    // ГЛАВНЫЙ ЭКРАН НАСТРОЕК
+    // НАСТРОЙКИ
 
     private fun showSettings() {
         clearAllListeners()
@@ -736,8 +737,6 @@ class MainActivity : Activity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addBottomNavigation(2)
     }
-
-    // ПЕРЕКЛЮЧАТЕЛИ
 
     private fun addSwitchRow(
         container: LinearLayout,
@@ -1278,7 +1277,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ГЛАВНЫЙ ЭКРАН ЧАТОВ
+    // ГЛАВНЫЙ ЭКРАН
 
     private fun showHome() {
         clearAllListeners()
@@ -1310,8 +1309,6 @@ class MainActivity : Activity() {
         root.addView(header)
         addGap(10)
 
-        // ПОИСК ПО ЧАТАМ
-
         val search = makeInput("Поиск по чатам или @username")
         search.inputType = 1
         root.addView(search, LinearLayout.LayoutParams(-1, dp(50)))
@@ -1333,8 +1330,6 @@ class MainActivity : Activity() {
 
         addGap(10)
 
-        // КНОПКА НОВОГО СООБЩЕНИЯ
-
         val newMessageButton = makeButton("＋  Новое сообщение")
         root.addView(
             newMessageButton,
@@ -1346,11 +1341,7 @@ class MainActivity : Activity() {
         }
 
         addGap(16)
-
-        root.addView(
-            makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true)
-        )
-
+        root.addView(makeText("МОИ ЧАТЫ", 14f, Color.rgb(25, 220, 130), true))
         addGap(8)
 
         val scroll = ScrollView(this)
@@ -1390,10 +1381,12 @@ class MainActivity : Activity() {
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 searchQuery = s?.toString().orEmpty()
                 renderUsers(container)
             }
+
             override fun afterTextChanged(s: Editable?) {}
         })
 
@@ -1465,7 +1458,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // СПИСОК ЧАТОВ С ПОИСКОМ
+    // СПИСОК ЧАТОВ И ПОИСК
 
     private fun loadChats(container: LinearLayout) {
         renderChats = null
@@ -1473,10 +1466,7 @@ class MainActivity : Activity() {
         chatListListener = ChatListManager.listenChats(
             callback = { previews ->
 
-                // Сохраняем функцию отрисовки именно для полученного списка.
-                // При вводе текста Firebase повторно не запрашивается.
-
-                renderChats = {
+                val drawChats: () -> Unit = {
                     container.removeAllViews()
 
                     val query = chatSearchQuery
@@ -1504,35 +1494,35 @@ class MainActivity : Activity() {
                             empty,
                             LinearLayout.LayoutParams(-1, dp(75))
                         )
-                        return@let
+                    } else {
+                        filtered.sortedByDescending { it.timestamp }
+                            .forEach { preview ->
+                                val time = if (preview.timestamp > 0L) {
+                                    SimpleDateFormat(
+                                        "HH:mm",
+                                        Locale.getDefault()
+                                    ).format(Date(preview.timestamp))
+                                } else ""
+
+                                val message = preview.lastMessage
+                                    .ifBlank { "Нет сообщений" }
+
+                                container.addView(
+                                    makeListItem(
+                                        preview.uid,
+                                        preview.username,
+                                        message,
+                                        time
+                                    ) {
+                                        openChat(preview.uid, preview.username)
+                                    }
+                                )
+                            }
                     }
-
-                    filtered.sortedByDescending { it.timestamp }
-                        .forEach { preview ->
-                            val time = if (preview.timestamp > 0L) {
-                                SimpleDateFormat(
-                                    "HH:mm",
-                                    Locale.getDefault()
-                                ).format(Date(preview.timestamp))
-                            } else ""
-
-                            val message = preview.lastMessage
-                                .ifBlank { "Нет сообщений" }
-
-                            container.addView(
-                                makeListItem(
-                                    preview.uid,
-                                    preview.username,
-                                    message,
-                                    time
-                                ) {
-                                    openChat(preview.uid, preview.username)
-                                }
-                            )
-                        }
                 }
 
-                renderChats?.invoke()
+                renderChats = drawChats
+                drawChats()
             },
             onError = { message -> toast(message) }
         )
@@ -1678,65 +1668,64 @@ class MainActivity : Activity() {
                         empty,
                         LinearLayout.LayoutParams(-1, dp(60))
                     )
-                    return@listenMessages
-                }
+                } else {
+                    val myUid = auth.currentUser?.uid ?: ""
 
-                val myUid = auth.currentUser?.uid ?: ""
+                    val sortedMessages = messages.sortedBy {
+                        it.child("timestamp").getValue(Long::class.java) ?: 0L
+                    }
 
-                val sortedMessages = messages.sortedBy {
-                    it.child("timestamp").getValue(Long::class.java) ?: 0L
-                }
+                    sortedMessages.forEach { snapshot ->
+                        val senderId = snapshot.child("senderId")
+                            .getValue(String::class.java) ?: ""
 
-                sortedMessages.forEach { snapshot ->
-                    val senderId = snapshot.child("senderId")
-                        .getValue(String::class.java) ?: ""
+                        val text = snapshot.child("text")
+                            .getValue(String::class.java) ?: ""
 
-                    val text = snapshot.child("text")
-                        .getValue(String::class.java) ?: ""
+                        val timestamp = snapshot.child("timestamp")
+                            .getValue(Long::class.java) ?: 0L
 
-                    val timestamp = snapshot.child("timestamp")
-                        .getValue(Long::class.java) ?: 0L
+                        val isMine = senderId == myUid
 
-                    val isMine = senderId == myUid
+                        val bubble = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(dp(12), dp(8), dp(12), dp(6))
+                            background = rounded(
+                                if (isMine) Color.rgb(20, 145, 90)
+                                else Color.rgb(36, 46, 59),
+                                14
+                            )
+                        }
 
-                    val bubble = LinearLayout(this).apply {
-                        orientation = LinearLayout.VERTICAL
-                        setPadding(dp(12), dp(8), dp(12), dp(6))
-                        background = rounded(
-                            if (isMine) Color.rgb(20, 145, 90)
-                            else Color.rgb(36, 46, 59),
-                            14
+                        bubble.addView(makeText(text, 16f, Color.WHITE))
+
+                        val timeText = makeText(
+                            if (timestamp > 0L) {
+                                SimpleDateFormat(
+                                    "HH:mm",
+                                    Locale.getDefault()
+                                ).format(Date(timestamp))
+                            } else "",
+                            10f, Color.LTGRAY
                         )
+
+                        timeText.gravity = Gravity.END
+                        bubble.addView(timeText)
+
+                        val row = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = if (isMine) Gravity.END else Gravity.START
+                        }
+
+                        row.addView(bubble, LinearLayout.LayoutParams(dp(270), -2))
+
+                        val rowParams = LinearLayout.LayoutParams(-1, -2)
+                        rowParams.bottomMargin = dp(7)
+                        messagesContainer.addView(row, rowParams)
                     }
 
-                    bubble.addView(makeText(text, 16f, Color.WHITE))
-
-                    val timeText = makeText(
-                        if (timestamp > 0L) {
-                            SimpleDateFormat(
-                                "HH:mm",
-                                Locale.getDefault()
-                            ).format(Date(timestamp))
-                        } else "",
-                        10f, Color.LTGRAY
-                    )
-
-                    timeText.gravity = Gravity.END
-                    bubble.addView(timeText)
-
-                    val row = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = if (isMine) Gravity.END else Gravity.START
-                    }
-
-                    row.addView(bubble, LinearLayout.LayoutParams(dp(270), -2))
-
-                    val rowParams = LinearLayout.LayoutParams(-1, -2)
-                    rowParams.bottomMargin = dp(7)
-                    messagesContainer.addView(row, rowParams)
+                    scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
                 }
-
-                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
             },
             onError = { message -> toast(message) }
         )
