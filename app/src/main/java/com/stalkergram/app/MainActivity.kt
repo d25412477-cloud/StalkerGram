@@ -69,7 +69,6 @@ class MainActivity : Activity() {
             setHintTextColor(Color.GRAY)
             setTextColor(Color.WHITE)
             textSize = 16f
-            singleLine = true
             setPadding(dp(14), dp(10), dp(14), dp(10))
             background = rounded(Color.rgb(29, 38, 49), 12)
             if (password) inputType = 129
