@@ -1,9 +1,12 @@
+
 package com.stalkergram.app
 
 import android.app.Activity
 import android.os.Bundle
 import android.graphics.Color
 import android.view.Gravity
+import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.*
 import android.text.Editable
 import android.text.TextWatcher
@@ -19,7 +22,11 @@ class MainActivity : Activity() {
     private val db by lazy { FirebaseConfig.database.reference }
 
     private lateinit var root: LinearLayout
+
     private var usersListener: ValueEventListener? = null
+    private var chatListener: ValueEventListener? = null
+
+    private var currentChatUid: String? = null
     private val users = mutableListOf<DataSnapshot>()
 
     private fun dp(v: Int): Int =
@@ -38,22 +45,22 @@ class MainActivity : Activity() {
     private fun setup(title: String) {
         root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(18), dp(20), dp(18), dp(12))
+        root.setPadding(dp(18), dp(15), dp(18), dp(12))
         root.setBackgroundColor(bg)
 
         val logo = TextView(this)
         logo.text = "☢ STALKERGRAM"
-        logo.textSize = 27f
+        logo.textSize = 25f
         logo.setTextColor(green)
         logo.gravity = Gravity.CENTER
         root.addView(logo)
 
         val heading = TextView(this)
         heading.text = title
-        heading.textSize = 22f
+        heading.textSize = 20f
         heading.setTextColor(white)
         heading.gravity = Gravity.CENTER
-        heading.setPadding(0, dp(25), 0, dp(20))
+        heading.setPadding(0, dp(18), 0, dp(15))
         root.addView(heading)
     }
 
@@ -69,8 +76,8 @@ class MainActivity : Activity() {
 
         if (password) e.inputType = 129
 
-        val p = LinearLayout.LayoutParams(-1, dp(54))
-        p.setMargins(0, dp(6), 0, dp(6))
+        val p = LinearLayout.LayoutParams(-1, dp(52))
+        p.setMargins(0, dp(5), 0, dp(5))
         root.addView(e, p)
         return e
     }
@@ -82,8 +89,8 @@ class MainActivity : Activity() {
         b.setBackgroundColor(green)
         b.setOnClickListener { action() }
 
-        val p = LinearLayout.LayoutParams(-1, dp(52))
-        p.setMargins(0, dp(10), 0, dp(5))
+        val p = LinearLayout.LayoutParams(-1, dp(50))
+        p.setMargins(0, dp(8), 0, dp(5))
         root.addView(b, p)
     }
 
@@ -93,12 +100,33 @@ class MainActivity : Activity() {
         t.textSize = 14f
         t.setTextColor(green)
         t.gravity = Gravity.CENTER
-        t.setPadding(dp(8), dp(16), dp(8), dp(16))
+        t.setPadding(dp(8), dp(14), dp(8), dp(14))
         t.setOnClickListener { action() }
         root.addView(t)
     }
 
+    private fun stopUsersListener() {
+        usersListener?.let {
+            db.child("users").removeEventListener(it)
+        }
+        usersListener = null
+    }
+
+    private fun stopChatListener() {
+        val otherUid = currentChatUid
+        val listener = chatListener
+
+        if (otherUid != null && listener != null) {
+            ChatManager.removeMessagesListener(otherUid, listener)
+        }
+
+        currentChatUid = null
+        chatListener = null
+    }
+
     private fun showLogin() {
+        stopUsersListener()
+        stopChatListener()
         setup("ВХОД В СИСТЕМУ")
 
         val email = makeField("Email")
@@ -124,6 +152,8 @@ class MainActivity : Activity() {
     }
 
     private fun showRegister() {
+        stopUsersListener()
+        stopChatListener()
         setup("НОВЫЙ СТАЛКЕР")
 
         val username = makeField("Имя пользователя")
@@ -166,17 +196,15 @@ class MainActivity : Activity() {
     }
 
     private fun showHome() {
-        usersListener?.let {
-            db.child("users").removeEventListener(it)
-        }
-        usersListener = null
+        stopChatListener()
+        stopUsersListener()
         users.clear()
 
         setup("ТЫ В ЗОНЕ")
 
         val subtitle = TextView(this)
         subtitle.text = "ПОИСК СТАЛКЕРОВ"
-        subtitle.textSize = 17f
+        subtitle.textSize = 16f
         subtitle.setTextColor(green)
         root.addView(subtitle)
 
@@ -237,11 +265,14 @@ class MainActivity : Activity() {
                 val name = user.child("username")
                     .getValue(String::class.java) ?: "Сталкер"
 
+                val uid = user.child("uid")
+                    .getValue(String::class.java) ?: user.key ?: ""
+
                 val item = TextView(this)
-                item.text = "☢  $name"
-                item.textSize = 17f
+                item.text = "☢  $name\nНажми, чтобы открыть чат"
+                item.textSize = 16f
                 item.setTextColor(white)
-                item.setPadding(dp(14), dp(18), dp(14), dp(18))
+                item.setPadding(dp(14), dp(15), dp(14), dp(15))
                 item.setBackgroundColor(Color.rgb(25, 31, 26))
 
                 val params = LinearLayout.LayoutParams(-1, -2)
@@ -249,11 +280,7 @@ class MainActivity : Activity() {
                 results.addView(item, params)
 
                 item.setOnClickListener {
-                    Toast.makeText(
-                        this,
-                        "Пользователь: $name",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    openChat(uid, name)
                 }
             }
         }
@@ -276,9 +303,10 @@ class MainActivity : Activity() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 users.clear()
                 users.addAll(snapshot.children.toList())
-
-                status.text = "Загружено аккаунтов: ${users.size}"
                 updateResults(search.text.toString())
+                if (search.text.isEmpty()) {
+                    status.text = "Загружено аккаунтов: ${users.size}"
+                }
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -289,10 +317,7 @@ class MainActivity : Activity() {
         db.child("users").addValueEventListener(usersListener!!)
 
         makeButton("ВЫЙТИ ИЗ АККАУНТА") {
-            usersListener?.let {
-                db.child("users").removeEventListener(it)
-            }
-            usersListener = null
+            stopUsersListener()
             AuthManager.logout()
             showLogin()
         }
@@ -300,11 +325,175 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    override fun onDestroy() {
-        usersListener?.let {
-            db.child("users").removeEventListener(it)
+    private fun openChat(otherUid: String, otherName: String) {
+        stopUsersListener()
+        stopChatListener()
+
+        currentChatUid = otherUid
+        setup("ЧАТ: $otherName")
+
+        val back = TextView(this)
+        back.text = "← НАЗАД К ПОИСКУ"
+        back.textSize = 15f
+        back.setTextColor(green)
+        back.setPadding(0, dp(8), 0, dp(12))
+        back.setOnClickListener { showHome() }
+        root.addView(back)
+
+        val scroll = ScrollView(this)
+        val messagesBox = LinearLayout(this)
+        messagesBox.orientation = LinearLayout.VERTICAL
+        scroll.addView(messagesBox)
+
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        )
+
+        val input = EditText(this)
+        input.hint = "Напиши сообщение..."
+        input.setHintTextColor(gray)
+        input.setTextColor(white)
+        input.textSize = 15f
+        input.setSingleLine(true)
+        input.imeOptions = EditorInfo.IME_ACTION_SEND
+        input.setPadding(dp(12), dp(8), dp(12), dp(8))
+        input.setBackgroundColor(Color.rgb(25, 31, 26))
+
+        val inputParams = LinearLayout.LayoutParams(-1, dp(50))
+        inputParams.setMargins(0, dp(8), 0, dp(5))
+        root.addView(input, inputParams)
+
+        makeButton("ОТПРАВИТЬ") {
+            sendCurrentMessage(otherUid, input)
         }
-        usersListener = null
+
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND) {
+                sendCurrentMessage(otherUid, input)
+                true
+            } else {
+                false
+            }
+        }
+
+        chatListener = ChatManager.listenMessages(
+            otherUid,
+            { snapshots ->
+                runOnUiThread {
+                    if (currentChatUid != otherUid) return@runOnUiThread
+
+                    messagesBox.removeAllViews()
+
+                    if (snapshots.isEmpty()) {
+                        val empty = TextView(this)
+                        empty.text = "Пока нет сообщений. Напиши первым!"
+                        empty.setTextColor(gray)
+                        empty.setPadding(0, dp(15), 0, dp(15))
+                        messagesBox.addView(empty)
+                    }
+
+                    snapshots.sortedBy {
+                        it.child("timestamp").getValue(Long::class.java) ?: 0L
+                    }.forEach { message ->
+                        val sender = message.child("senderId")
+                            .getValue(String::class.java) ?: ""
+
+                        val text = message.child("text")
+                            .getValue(String::class.java) ?: ""
+
+                        val timestamp = message.child("timestamp")
+                            .getValue(Long::class.java) ?: 0L
+
+                        val time = if (timestamp > 0) {
+                            android.text.format.DateFormat.format(
+                                "HH:mm",
+                                timestamp
+                            ).toString()
+                        } else {
+                            "..."
+                        }
+
+                        val mine = sender ==
+                            FirebaseAuth.getInstance().currentUser?.uid
+
+                        val bubble = TextView(this)
+                        bubble.text = "$text\n$time"
+                        bubble.textSize = 15f
+                        bubble.setTextColor(if (mine) green else white)
+                        bubble.setPadding(dp(12), dp(10), dp(12), dp(10))
+                        bubble.setBackgroundColor(
+                            if (mine) Color.rgb(35, 55, 38)
+                            else Color.rgb(25, 31, 26)
+                        )
+
+                        val params = LinearLayout.LayoutParams(
+                            -1,
+                            -2
+                        )
+                        params.setMargins(
+                            0,
+                            dp(4),
+                            0,
+                            dp(4)
+                        )
+                        messagesBox.addView(bubble, params)
+                    }
+
+                    scroll.post {
+                        scroll.fullScroll(View.FOCUS_DOWN)
+                    }
+                }
+            },
+            { error ->
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        error,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        )
+
+        setContentView(root)
+    }
+
+    private fun sendCurrentMessage(
+        receiverUid: String,
+        input: EditText
+    ) {
+        val text = input.text.toString().trim()
+
+        if (text.isEmpty()) {
+            Toast.makeText(
+                this,
+                "Напиши сообщение",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        input.text.clear()
+
+        ChatManager.sendMessage(receiverUid, text) { success, message ->
+            runOnUiThread {
+                if (!success) {
+                    input.setText(text)
+                }
+
+                Toast.makeText(
+                    this,
+                    message,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        stopUsersListener()
+        stopChatListener()
         super.onDestroy()
     }
 }
