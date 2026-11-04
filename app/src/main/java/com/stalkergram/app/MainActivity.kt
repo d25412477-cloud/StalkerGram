@@ -19,7 +19,12 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        showLogin()
+
+        if (AuthManager.isLoggedIn()) {
+            showHome()
+        } else {
+            showLogin()
+        }
     }
 
     private fun setupScreen(title: String, subtitle: String) {
@@ -52,8 +57,6 @@ class MainActivity : Activity() {
         info.gravity = Gravity.CENTER
         info.setPadding(0, 0, 0, 25)
         root.addView(info)
-
-        setContentView(root)
     }
 
     private fun addField(hint: String, password: Boolean = false): EditText {
@@ -66,13 +69,10 @@ class MainActivity : Activity() {
         field.setPadding(16, 12, 16, 12)
         field.setBackgroundColor(Color.rgb(25, 31, 26))
 
-        if (password) {
-            field.inputType = 129
-        }
+        if (password) field.inputType = 129
 
         val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            58
+            LinearLayout.LayoutParams.MATCH_PARENT, 58
         )
         params.setMargins(0, 7, 0, 7)
         root.addView(field, params)
@@ -88,8 +88,7 @@ class MainActivity : Activity() {
         button.setOnClickListener { action() }
 
         val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            58
+            LinearLayout.LayoutParams.MATCH_PARENT, 58
         )
         params.setMargins(0, 16, 0, 8)
         root.addView(button, params)
@@ -109,47 +108,91 @@ class MainActivity : Activity() {
     private fun showLogin() {
         setupScreen("ВХОД В СИСТЕМУ", "СВЯЗЬ В ЗОНЕ")
 
-        val username = addField("Имя пользователя")
+        val email = addField("Email")
         val password = addField("Пароль", true)
 
         addButton("ВОЙТИ В ЗОНУ") {
-            Toast.makeText(this, "Авторизация появится после подключения сервера", Toast.LENGTH_LONG).show()
+            AuthManager.login(
+                email.text.toString().trim(),
+                password.text.toString()
+            ) { success, message ->
+                runOnUiThread {
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    if (success) showHome()
+                }
+            }
         }
 
         addLink("НЕТ АККАУНТА? СОЗДАТЬ") {
             showRegister()
         }
+
+        setContentView(root)
     }
 
     private fun showRegister() {
         setupScreen("НОВЫЙ СТАЛКЕР", "РЕГИСТРАЦИЯ В СИСТЕМЕ")
 
-        val username = addField("Придумай имя пользователя")
+        val username = addField("Имя пользователя")
+        val email = addField("Email")
         val password = addField("Придумай пароль", true)
         val confirm = addField("Повтори пароль", true)
 
         addButton("СОЗДАТЬ АККАУНТ") {
             val name = username.text.toString().trim()
+            val mail = email.text.toString().trim()
             val pass = password.text.toString()
-            val repeat = confirm.text.toString()
 
             when {
                 name.length < 3 ->
                     Toast.makeText(this, "Имя: минимум 3 символа", Toast.LENGTH_SHORT).show()
 
+                !android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches() ->
+                    Toast.makeText(this, "Введи правильный Email", Toast.LENGTH_SHORT).show()
+
                 pass.length < 6 ->
                     Toast.makeText(this, "Пароль: минимум 6 символов", Toast.LENGTH_SHORT).show()
 
-                pass != repeat ->
+                pass != confirm.text.toString() ->
                     Toast.makeText(this, "Пароли не совпадают", Toast.LENGTH_SHORT).show()
 
-                else ->
-                    Toast.makeText(this, "Форма готова. Сервер регистрации добавим следующим этапом.", Toast.LENGTH_LONG).show()
+                else -> {
+                    AuthManager.register(name, mail, pass) { success, message ->
+                        runOnUiThread {
+                            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                            if (success) showHome()
+                        }
+                    }
+                }
             }
         }
 
         addLink("УЖЕ ЕСТЬ АККАУНТ? ВОЙТИ") {
             showLogin()
         }
+
+        setContentView(root)
+    }
+
+    private fun showHome() {
+        setupScreen("ТЫ В ЗОНЕ", "СВЯЗЬ УСТАНОВЛЕНА")
+
+        val user = AuthManager.run {
+            "АККАУНТ: " + (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: "STALKER")
+        }
+
+        val profile = TextView(this)
+        profile.text = user
+        profile.setTextColor(green)
+        profile.textSize = 16f
+        profile.gravity = Gravity.CENTER
+        root.addView(profile)
+
+        addButton("ВЫЙТИ ИЗ АККАУНТА") {
+            AuthManager.logout()
+            showLogin()
+        }
+
+        setContentView(root)
     }
 }
