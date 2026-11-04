@@ -612,7 +612,13 @@ class MainActivity : Activity() {
         return row
     }
 
-    private fun settingsHeader(title: String) {
+    // ИЗМЕНЕНО: теперь можно указать, куда ведёт кнопка «Назад».
+    // По умолчанию подразделы возвращаются в главное меню настроек.
+
+    private fun settingsHeader(
+        title: String,
+        onBack: () -> Unit = { showSettings() }
+    ) {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -621,7 +627,7 @@ class MainActivity : Activity() {
         val back = makeText("‹", 34f)
         back.gravity = Gravity.CENTER
         header.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
-        back.setOnClickListener { showSettings() }
+        back.setOnClickListener { onBack() }
 
         header.addView(
             makeText(title, 21f, Color.WHITE, true),
@@ -637,7 +643,11 @@ class MainActivity : Activity() {
         clearAllListeners()
         newRoot()
 
-        settingsHeader("Настройки")
+        // ИЗМЕНЕНО: из главных настроек возвращаемся в профиль.
+        settingsHeader("Настройки") {
+            showProfile()
+        }
+
         addGap(12)
 
         val uid = auth.currentUser?.uid ?: return
