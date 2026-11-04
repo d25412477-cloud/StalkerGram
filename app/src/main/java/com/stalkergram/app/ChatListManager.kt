@@ -7,7 +7,8 @@ data class ChatPreview(
     val uid: String,
     val username: String,
     val lastMessage: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val unreadCount: Int
 )
 
 object ChatListManager {
@@ -28,13 +29,14 @@ object ChatListManager {
         }
 
         val listener = object : ValueEventListener {
+
             override fun onDataChange(snapshot: DataSnapshot) {
                 val previews = mutableListOf<ChatPreview>()
 
                 val myChats = snapshot.children.filter { chat ->
                     val key = chat.key ?: ""
                     key.startsWith("${myUid}_") ||
-                    key.endsWith("_$myUid")
+                        key.endsWith("_$myUid")
                 }
 
                 if (myChats.isEmpty()) {
@@ -53,8 +55,11 @@ object ChatListManager {
                         key.removeSuffix("_$myUid")
                     }
 
-                    val last = chat.child("messages").children.maxByOrNull {
-                        it.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val messages = chat.child("messages").children.toList()
+
+                    val last = messages.maxByOrNull {
+                        it.child("timestamp")
+                            .getValue(Long::class.java) ?: 0L
                     }
 
                     val lastMessage = last?.child("text")
@@ -63,9 +68,20 @@ object ChatListManager {
                     val timestamp = last?.child("timestamp")
                         ?.getValue(Long::class.java) ?: 0L
 
+                    val unreadCount = messages.count { message ->
+                        val receiverId = message.child("receiverId")
+                            .getValue(String::class.java)
+
+                        val read = message.child("read")
+                            .getValue(Boolean::class.java)
+
+                        receiverId == myUid && read == false
+                    }
+
                     db.child("users").child(otherUid)
                         .addListenerForSingleValueEvent(
                             object : ValueEventListener {
+
                                 override fun onDataChange(user: DataSnapshot) {
                                     val username = user.child("username")
                                         .getValue(String::class.java)
@@ -73,10 +89,11 @@ object ChatListManager {
 
                                     previews.add(
                                         ChatPreview(
-                                            otherUid,
-                                            username,
-                                            lastMessage,
-                                            timestamp
+                                            uid = otherUid,
+                                            username = username,
+                                            lastMessage = lastMessage,
+                                            timestamp = timestamp,
+                                            unreadCount = unreadCount
                                         )
                                     )
 
