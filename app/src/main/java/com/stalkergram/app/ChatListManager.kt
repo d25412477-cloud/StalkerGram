@@ -32,52 +32,41 @@ object ChatListManager {
         val listener = object : ValueEventListener {
 
             override fun onDataChange(snapshot: DataSnapshot) {
-                val previews = mutableListOf<ChatPreview>()
-
-                val myChats = snapshot.children.filter { chat ->
-                    val key = chat.key ?: ""
-                    key.startsWith("${myUid}_") ||
-                        key.endsWith("_$myUid")
+                if (!snapshot.exists()) {
+                    callback(emptyList())
+                    return
                 }
 
-                if (myChats.isEmpty()) {
+                val previews = mutableListOf<ChatPreview>()
+                val chats = snapshot.children.toList()
+
+                if (chats.isEmpty()) {
                     callback(emptyList())
                     return
                 }
 
                 var completed = 0
 
-                for (chat in myChats) {
-                    val key = chat.key ?: continue
+                for (chat in chats) {
+                    val otherUid = chat.child("otherUid")
+                        .getValue(String::class.java)
 
-                    val otherUid = if (key.startsWith("${myUid}_")) {
-                        key.removePrefix("${myUid}_")
-                    } else {
-                        key.removeSuffix("_$myUid")
+                    if (otherUid.isNullOrBlank()) {
+                        completed++
+                        if (completed == chats.size) {
+                            callback(previews.sortedByDescending { it.timestamp })
+                        }
+                        continue
                     }
 
-                    val messages = chat.child("messages").children.toList()
+                    val lastMessage = chat.child("lastMessage")
+                        .getValue(String::class.java) ?: ""
 
-                    val last = messages.maxByOrNull {
-                        it.child("timestamp")
-                            .getValue(Long::class.java) ?: 0L
-                    }
+                    val timestamp = chat.child("timestamp")
+                        .getValue(Long::class.java) ?: 0L
 
-                    val lastMessage = last?.child("text")
-                        ?.getValue(String::class.java) ?: ""
-
-                    val timestamp = last?.child("timestamp")
-                        ?.getValue(Long::class.java) ?: 0L
-
-                    val unreadCount = messages.count { message ->
-                        val receiverId = message.child("receiverId")
-                            .getValue(String::class.java)
-
-                        val read = message.child("read")
-                            .getValue(Boolean::class.java) ?: false
-
-                        receiverId == myUid && !read
-                    }
+                    val unreadCount = chat.child("unreadCount")
+                        .getValue(Int::class.java) ?: 0
 
                     db.child("users").child(otherUid)
                         .child("username")
@@ -98,22 +87,28 @@ object ChatListManager {
 
                             completed++
 
-                            if (completed == myChats.size) {
+                            if (completed == chats.size) {
                                 callback(
-                                    previews.sortedByDescending {
-                                        it.timestamp
-                                    }
+                                    previews.sortedByDescending { it.timestamp }
                                 )
                             }
                         }
                         .addOnFailureListener {
+                            previews.add(
+                                ChatPreview(
+                                    uid = otherUid,
+                                    username = "Пользователь",
+                                    lastMessage = lastMessage,
+                                    timestamp = timestamp,
+                                    unreadCount = unreadCount
+                                )
+                            )
+
                             completed++
 
-                            if (completed == myChats.size) {
+                            if (completed == chats.size) {
                                 callback(
-                                    previews.sortedByDescending {
-                                        it.timestamp
-                                    }
+                                    previews.sortedByDescending { it.timestamp }
                                 )
                             }
                         }
@@ -125,11 +120,16 @@ object ChatListManager {
             }
         }
 
-        db.child("chats").addValueEventListener(listener)
+        db.child("userChats").child(myUid)
+            .addValueEventListener(listener)
+
         return listener
     }
 
     fun removeListener(listener: ValueEventListener) {
-        db.child("chats").removeEventListener(listener)
+        val myUid = auth.currentUser?.uid ?: return
+
+        db.child("userChats").child(myUid)
+            .removeEventListener(listener)
     }
 }
