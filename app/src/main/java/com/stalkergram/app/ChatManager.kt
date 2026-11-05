@@ -17,15 +17,21 @@ object ChatManager {
         }
     }
 
-    fun sendMessage(
+    private fun saveMessage(
         receiverUid: String,
-        text: String,
+        message: Map<String, Any>,
+        previewText: String,
         callback: (Boolean, String) -> Unit
     ) {
         val senderUid = auth.currentUser?.uid
 
         if (senderUid == null) {
             callback(false, "Сначала войди в аккаунт")
+            return
+        }
+
+        if (receiverUid == senderUid) {
+            callback(false, "Нельзя отправить сообщение самому себе")
             return
         }
 
@@ -38,8 +44,52 @@ object ChatManager {
             return
         }
 
+        val finalMessage = message.toMutableMap()
+        finalMessage["id"] = messageId
+
+        val updates = mapOf(
+            "chats/$id/members/$senderUid" to true,
+            "chats/$id/members/$receiverUid" to true,
+            "chats/$id/messages/$messageId" to finalMessage,
+
+            "userChats/$senderUid/$id/otherUid" to receiverUid,
+            "userChats/$senderUid/$id/lastMessage" to previewText,
+            "userChats/$senderUid/$id/timestamp" to ServerValue.TIMESTAMP,
+            "userChats/$senderUid/$id/unreadCount" to 0,
+
+            "userChats/$receiverUid/$id/otherUid" to senderUid,
+            "userChats/$receiverUid/$id/lastMessage" to previewText,
+            "userChats/$receiverUid/$id/timestamp" to ServerValue.TIMESTAMP,
+            "userChats/$receiverUid/$id/unreadCount" to ServerValue.increment(1)
+        )
+
+        db.updateChildren(updates)
+            .addOnSuccessListener {
+                callback(true, "Сообщение отправлено 💚")
+            }
+            .addOnFailureListener {
+                callback(false, it.message ?: "Ошибка отправки")
+            }
+    }
+
+    fun sendMessage(
+        receiverUid: String,
+        text: String,
+        callback: (Boolean, String) -> Unit
+    ) {
+        val senderUid = auth.currentUser?.uid
+
+        if (senderUid == null) {
+            callback(false, "Сначала войди в аккаунт")
+            return
+        }
+
+        if (text.isBlank()) {
+            callback(false, "Сообщение пустое")
+            return
+        }
+
         val message = mapOf(
-            "id" to messageId,
             "senderId" to senderUid,
             "receiverId" to receiverUid,
             "text" to text,
@@ -49,14 +99,7 @@ object ChatManager {
             "status" to "sent"
         )
 
-        db.child("chats").child(id).child("messages")
-            .child(messageId).setValue(message)
-            .addOnSuccessListener {
-                callback(true, "Сообщение отправлено")
-            }
-            .addOnFailureListener {
-                callback(false, it.message ?: "Ошибка отправки")
-            }
+        saveMessage(receiverUid, message, text, callback)
     }
 
     fun sendImage(
@@ -76,17 +119,7 @@ object ChatManager {
             return
         }
 
-        val id = chatId(senderUid, receiverUid)
-        val messageId = db.child("chats").child(id)
-            .child("messages").push().key
-
-        if (messageId == null) {
-            callback(false, "Не удалось создать сообщение")
-            return
-        }
-
         val message = mapOf(
-            "id" to messageId,
             "senderId" to senderUid,
             "receiverId" to receiverUid,
             "text" to "",
@@ -97,14 +130,7 @@ object ChatManager {
             "status" to "sent"
         )
 
-        db.child("chats").child(id).child("messages")
-            .child(messageId).setValue(message)
-            .addOnSuccessListener {
-                callback(true, "Фотография отправлена 💚")
-            }
-            .addOnFailureListener {
-                callback(false, it.message ?: "Ошибка отправки фотографии")
-            }
+        saveMessage(receiverUid, message, "📷 Фото", callback)
     }
 
     fun markMessagesRead(otherUid: String) {
@@ -115,6 +141,8 @@ object ChatManager {
             .get()
             .addOnSuccessListener { snapshot ->
 
+                val updates = mutableMapOf<String, Any>()
+
                 for (message in snapshot.children) {
                     val receiver = message.child("receiverId")
                         .getValue(String::class.java)
@@ -123,14 +151,21 @@ object ChatManager {
                         .getValue(Boolean::class.java) ?: false
 
                     if (receiver == myUid && !read) {
-                        message.ref.updateChildren(
-                            mapOf(
-                                "read" to true,
-                                "status" to "read"
-                            )
-                        )
+                        val key = message.key ?: continue
+                        updates["$key/read"] = true
+                        updates["$key/status"] = "read"
                     }
                 }
+
+                if (updates.isNotEmpty()) {
+                    db.child("chats").child(id)
+                        .child("messages")
+                        .updateChildren(updates)
+                }
+
+                db.child("userChats").child(myUid)
+                    .child(id).child("unreadCount")
+                    .setValue(0)
             }
     }
 
@@ -143,7 +178,6 @@ object ChatManager {
         val myUid = auth.currentUser?.uid
 
         val listener = object : ValueEventListener {
-
             override fun onDataChange(snapshot: DataSnapshot) {
                 onMessages(snapshot.children.toList())
             }
