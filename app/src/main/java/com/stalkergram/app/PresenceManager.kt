@@ -1,4 +1,3 @@
-
 package com.stalkergram.app
 
 import com.google.firebase.database.*
@@ -28,30 +27,28 @@ object PresenceManager {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (snapshot.getValue(Boolean::class.java) == true) {
 
-                    presenceRef.onDisconnect()
-                        .updateChildren(
-                            mapOf(
-                                "online" to false,
-                                "lastSeen" to ServerValue.TIMESTAMP
-                            )
+                    presenceRef.onDisconnect().updateChildren(
+                        mapOf(
+                            "online" to false,
+                            "lastSeen" to ServerValue.TIMESTAMP
                         )
-                        .addOnSuccessListener {
-                            presenceRef.updateChildren(
-                                mapOf(
-                                    "online" to true,
-                                    "lastSeen" to ServerValue.TIMESTAMP
-                                )
-                            )
-                        }
+                    )
+
+                    presenceRef.updateChildren(
+                        mapOf(
+                            "online" to true,
+                            "lastSeen" to ServerValue.TIMESTAMP
+                        )
+                    )
                 }
             }
 
-            override fun onCancelled(error: DatabaseError) {
-            }
+            override fun onCancelled(error: DatabaseError) {}
         }
 
         connectedRef = ref
         connectionListener = listener
+
         ref.addValueEventListener(listener)
     }
 
