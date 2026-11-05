@@ -30,8 +30,8 @@ object ChatManager {
             return
         }
 
-        if (receiverUid == senderUid) {
-            callback(false, "Нельзя отправить сообщение самому себе")
+        if (receiverUid.isBlank() || receiverUid == senderUid) {
+            callback(false, "Неверный получатель")
             return
         }
 
@@ -54,13 +54,7 @@ object ChatManager {
 
             "userChats/$senderUid/$id/otherUid" to receiverUid,
             "userChats/$senderUid/$id/lastMessage" to previewText,
-            "userChats/$senderUid/$id/timestamp" to ServerValue.TIMESTAMP,
-            "userChats/$senderUid/$id/unreadCount" to 0,
-
-            "userChats/$receiverUid/$id/otherUid" to senderUid,
-            "userChats/$receiverUid/$id/lastMessage" to previewText,
-            "userChats/$receiverUid/$id/timestamp" to ServerValue.TIMESTAMP,
-            "userChats/$receiverUid/$id/unreadCount" to ServerValue.increment(1)
+            "userChats/$senderUid/$id/timestamp" to ServerValue.TIMESTAMP
         )
 
         db.updateChildren(updates)
@@ -162,10 +156,6 @@ object ChatManager {
                         .child("messages")
                         .updateChildren(updates)
                 }
-
-                db.child("userChats").child(myUid)
-                    .child(id).child("unreadCount")
-                    .setValue(0)
             }
     }
 
