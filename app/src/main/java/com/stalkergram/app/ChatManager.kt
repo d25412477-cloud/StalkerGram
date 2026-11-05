@@ -10,11 +10,8 @@ object ChatManager {
     private val auth = FirebaseAuth.getInstance()
 
     private fun chatId(uid1: String, uid2: String): String {
-        return if (uid1 < uid2) {
-            "${uid1}_${uid2}"
-        } else {
-            "${uid2}_${uid1}"
-        }
+        return if (uid1 < uid2) "${uid1}_${uid2}"
+        else "${uid2}_${uid1}"
     }
 
     private fun saveMessage(
@@ -36,8 +33,9 @@ object ChatManager {
         }
 
         val id = chatId(senderUid, receiverUid)
-        val messageId = db.child("chats").child(id)
-            .child("messages").push().key
+        val chatRef = db.child("chats").child(id)
+
+        val messageId = chatRef.child("messages").push().key
 
         if (messageId == null) {
             callback(false, "Не удалось создать сообщение")
@@ -47,22 +45,38 @@ object ChatManager {
         val finalMessage = message.toMutableMap()
         finalMessage["id"] = messageId
 
-        val updates = mapOf(
-            "chats/$id/members/$senderUid" to true,
-            "chats/$id/members/$receiverUid" to true,
-            "chats/$id/messages/$messageId" to finalMessage,
-
-            "userChats/$senderUid/$id/otherUid" to receiverUid,
-            "userChats/$senderUid/$id/lastMessage" to previewText,
-            "userChats/$senderUid/$id/timestamp" to ServerValue.TIMESTAMP
-        )
-
-        db.updateChildren(updates)
+        // Сначала добавляем отправителя в участники
+        chatRef.child("members").child(senderUid)
+            .setValue(true)
             .addOnSuccessListener {
-                callback(true, "Сообщение отправлено 💚")
+
+                // Затем добавляем получателя
+                chatRef.child("members").child(receiverUid)
+                    .setValue(true)
+                    .addOnSuccessListener {
+
+                        val updates = mapOf(
+                            "chats/$id/messages/$messageId" to finalMessage,
+
+                            "userChats/$senderUid/$id/otherUid" to receiverUid,
+                            "userChats/$senderUid/$id/lastMessage" to previewText,
+                            "userChats/$senderUid/$id/timestamp" to ServerValue.TIMESTAMP
+                        )
+
+                        db.updateChildren(updates)
+                            .addOnSuccessListener {
+                                callback(true, "Сообщение отправлено 💚")
+                            }
+                            .addOnFailureListener {
+                                callback(false, it.message ?: "Ошибка отправки")
+                            }
+                    }
+                    .addOnFailureListener {
+                        callback(false, it.message ?: "Ошибка добавления участника")
+                    }
             }
             .addOnFailureListener {
-                callback(false, it.message ?: "Ошибка отправки")
+                callback(false, it.message ?: "Ошибка создания чата")
             }
     }
 
@@ -71,9 +85,7 @@ object ChatManager {
         text: String,
         callback: (Boolean, String) -> Unit
     ) {
-        val senderUid = auth.currentUser?.uid
-
-        if (senderUid == null) {
+        if (auth.currentUser == null) {
             callback(false, "Сначала войди в аккаунт")
             return
         }
@@ -82,6 +94,8 @@ object ChatManager {
             callback(false, "Сообщение пустое")
             return
         }
+
+        val senderUid = auth.currentUser!!.uid
 
         val message = mapOf(
             "senderId" to senderUid,
@@ -101,9 +115,7 @@ object ChatManager {
         imageBase64: String,
         callback: (Boolean, String) -> Unit
     ) {
-        val senderUid = auth.currentUser?.uid
-
-        if (senderUid == null) {
+        if (auth.currentUser == null) {
             callback(false, "Сначала войди в аккаунт")
             return
         }
@@ -112,6 +124,8 @@ object ChatManager {
             callback(false, "Фотография пустая")
             return
         }
+
+        val senderUid = auth.currentUser!!.uid
 
         val message = mapOf(
             "senderId" to senderUid,
@@ -197,7 +211,8 @@ object ChatManager {
         val myUid = auth.currentUser?.uid ?: return
         val id = chatId(myUid, otherUid)
 
-        db.child("chats").child(id).child("messages")
+        db.child("chats").child(id)
+            .child("messages")
             .removeEventListener(listener)
     }
 }
