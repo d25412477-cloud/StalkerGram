@@ -1,3 +1,4 @@
+
 package com.stalkergram.app
 
 import com.google.firebase.auth.FirebaseAuth
@@ -28,91 +29,73 @@ object ChatListManager {
             return null
         }
 
+        val ref = db.child("userChats").child(myUid)
+
         val listener = object : ValueEventListener {
 
             override fun onDataChange(snapshot: DataSnapshot) {
                 val previews = mutableListOf<ChatPreview>()
 
-                val myChats = snapshot.children.filter { chat ->
-                    val key = chat.key ?: ""
-                    key.startsWith("${myUid}_") ||
-                        key.endsWith("_$myUid")
-                }
+                val entries = snapshot.children.toList()
 
-                if (myChats.isEmpty()) {
+                if (entries.isEmpty()) {
                     callback(emptyList())
                     return
                 }
 
                 var completed = 0
 
-                for (chat in myChats) {
-                    val key = chat.key ?: continue
+                for (entry in entries) {
+                    val otherUid = entry.child("otherUid")
+                        .getValue(String::class.java) ?: continue
 
-                    val otherUid = if (key.startsWith("${myUid}_")) {
-                        key.removePrefix("${myUid}_")
-                    } else {
-                        key.removeSuffix("_$myUid")
-                    }
+                    val lastMessage = entry.child("lastMessage")
+                        .getValue(String::class.java) ?: ""
 
-                    val messages = chat.child("messages").children.toList()
+                    val timestamp = entry.child("timestamp")
+                        .getValue(Long::class.java) ?: 0L
 
-                    val last = messages.maxByOrNull {
-                        it.child("timestamp")
-                            .getValue(Long::class.java) ?: 0L
-                    }
-
-                    val lastMessage = last?.child("text")
-                        ?.getValue(String::class.java) ?: ""
-
-                    val timestamp = last?.child("timestamp")
-                        ?.getValue(Long::class.java) ?: 0L
-
-                    val unreadCount = messages.count { message ->
-                        val receiverId = message.child("receiverId")
-                            .getValue(String::class.java)
-
-                        val read = message.child("read")
-                            .getValue(Boolean::class.java)
-
-                        receiverId == myUid && read == false
-                    }
+                    val unreadCount = entry.child("unreadCount")
+                        .getValue(Int::class.java) ?: 0
 
                     db.child("users").child(otherUid)
-                        .addListenerForSingleValueEvent(
-                            object : ValueEventListener {
+                        .child("username")
+                        .get()
+                        .addOnSuccessListener { user ->
+                            val username = user.getValue(String::class.java)
+                                ?: "Пользователь"
 
-                                override fun onDataChange(user: DataSnapshot) {
-                                    val username = user.child("username")
-                                        .getValue(String::class.java)
-                                        ?: "Пользователь"
+                            previews.add(
+                                ChatPreview(
+                                    uid = otherUid,
+                                    username = username,
+                                    lastMessage = lastMessage,
+                                    timestamp = timestamp,
+                                    unreadCount = unreadCount
+                                )
+                            )
 
-                                    previews.add(
-                                        ChatPreview(
-                                            uid = otherUid,
-                                            username = username,
-                                            lastMessage = lastMessage,
-                                            timestamp = timestamp,
-                                            unreadCount = unreadCount
-                                        )
-                                    )
+                            completed++
 
-                                    completed++
-
-                                    if (completed == myChats.size) {
-                                        callback(
-                                            previews.sortedByDescending {
-                                                it.timestamp
-                                            }
-                                        )
+                            if (completed == entries.size) {
+                                callback(
+                                    previews.sortedByDescending {
+                                        it.timestamp
                                     }
-                                }
-
-                                override fun onCancelled(error: DatabaseError) {
-                                    onError(error.message)
-                                }
+                                )
                             }
-                        )
+                        }
+                        .addOnFailureListener {
+                            completed++
+
+                            if (completed == entries.size) {
+                                callback(
+                                    previews.sortedByDescending {
+                                        it.timestamp
+                                    }
+                                )
+                            }
+                        }
                 }
             }
 
@@ -121,11 +104,13 @@ object ChatListManager {
             }
         }
 
-        db.child("chats").addValueEventListener(listener)
+        ref.addValueEventListener(listener)
         return listener
     }
 
     fun removeListener(listener: ValueEventListener) {
-        db.child("chats").removeEventListener(listener)
+        val myUid = auth.currentUser?.uid ?: return
+        db.child("userChats").child(myUid)
+            .removeEventListener(listener)
     }
 }
