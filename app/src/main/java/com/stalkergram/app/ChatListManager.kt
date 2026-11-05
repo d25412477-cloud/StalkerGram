@@ -35,7 +35,6 @@ object ChatListManager {
 
             override fun onDataChange(snapshot: DataSnapshot) {
                 val previews = mutableListOf<ChatPreview>()
-
                 val entries = snapshot.children.toList()
 
                 if (entries.isEmpty()) {
@@ -62,6 +61,7 @@ object ChatListManager {
                         .child("username")
                         .get()
                         .addOnSuccessListener { user ->
+
                             val username = user.getValue(String::class.java)
                                 ?: "Пользователь"
 
@@ -110,6 +110,7 @@ object ChatListManager {
 
     fun removeListener(listener: ValueEventListener) {
         val myUid = auth.currentUser?.uid ?: return
+
         db.child("userChats").child(myUid)
             .removeEventListener(listener)
     }
