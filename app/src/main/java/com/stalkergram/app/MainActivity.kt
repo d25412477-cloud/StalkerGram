@@ -1,3 +1,4 @@
+
 package com.stalkergram.app
 
 import android.app.Activity
@@ -286,7 +287,7 @@ class MainActivity : Activity() {
             })
     }
 
-    // ВЫБОР ФОТО ПРОФИЛЯ
+    // ВЫБОР ФОТО
 
     private fun chooseProfilePhoto() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -298,8 +299,6 @@ class MainActivity : Activity() {
             PICK_IMAGE_REQUEST
         )
     }
-
-    // ВЫБОР ФОТО ДЛЯ ЧАТА
 
     private fun chooseChatImage(receiverUid: String) {
         pendingChatImageUid = receiverUid
@@ -327,9 +326,7 @@ class MainActivity : Activity() {
         val uri = data?.data ?: return
 
         when (requestCode) {
-            PICK_IMAGE_REQUEST -> {
-                saveProfilePhoto(uri)
-            }
+            PICK_IMAGE_REQUEST -> saveProfilePhoto(uri)
 
             PICK_CHAT_IMAGE_REQUEST -> {
                 val receiverUid = pendingChatImageUid
@@ -341,8 +338,6 @@ class MainActivity : Activity() {
             }
         }
     }
-
-    // СОХРАНЕНИЕ ФОТО ПРОФИЛЯ
 
     private fun saveProfilePhoto(uri: Uri) {
         val uid = auth.currentUser?.uid ?: return
@@ -390,8 +385,6 @@ class MainActivity : Activity() {
             toast("Ошибка обработки фотографии")
         }
     }
-
-    // ПОДГОТОВКА И ОТПРАВКА ФОТО В ЧАТ
 
     private fun prepareAndSendChatImage(uri: Uri, receiverUid: String) {
         toast("Подготавливаем фотографию...")
@@ -441,8 +434,6 @@ class MainActivity : Activity() {
             }
         }
     }
-
-    // ЗАГРУЗКА ФОТОГРАФИИ ИЗ ЧАТА
 
     private fun loadChatImage(encoded: String, imageView: ImageView) {
         imageView.tag = encoded
@@ -579,7 +570,6 @@ class MainActivity : Activity() {
         }
 
         root.addView(top)
-
         addGap(10)
 
         val search = makeInput("Поиск")
@@ -605,9 +595,7 @@ class MainActivity : Activity() {
         })
 
         addGap(10)
-
         root.addView(makeText("Истории", 17f, textColor, true))
-
         addGap(7)
 
         val storiesScroll = HorizontalScrollView(this).apply {
@@ -632,7 +620,6 @@ class MainActivity : Activity() {
         val myAvatar = makeAvatar("+", 58)
         myAvatar.text = "+"
         myAvatar.textSize = 26f
-
         myStory.addView(myAvatar)
 
         val myLabel = makeText("Моя история", 10f, muted)
@@ -671,7 +658,6 @@ class MainActivity : Activity() {
                         val label = makeText(name, 10f, muted)
                         label.gravity = Gravity.CENTER
                         label.maxLines = 1
-
                         story.addView(label)
 
                         stories.addView(
@@ -693,9 +679,7 @@ class MainActivity : Activity() {
         )
 
         addGap(8)
-
         root.addView(makeText("Сообщения", 19f, textColor, true))
-
         addGap(7)
 
         val scroll = ScrollView(this)
@@ -910,9 +894,7 @@ class MainActivity : Activity() {
 
         val messageText = makeText(message, 13f, muted)
         messageText.maxLines = 1
-        messageText.ellipsize =
-            android.text.TextUtils.TruncateAt.END
-
+        messageText.ellipsize = android.text.TextUtils.TruncateAt.END
         texts.addView(messageText)
 
         item.addView(
@@ -945,7 +927,6 @@ class MainActivity : Activity() {
 
             val params = LinearLayout.LayoutParams(dp(25), dp(25))
             params.topMargin = dp(5)
-
             right.addView(badge, params)
         }
 
@@ -1196,7 +1177,6 @@ class MainActivity : Activity() {
 
         val inputParams = LinearLayout.LayoutParams(0, dp(49), 1f)
         inputParams.leftMargin = dp(6)
-
         bottom.addView(messageInput, inputParams)
 
         val sendButton = TextView(this).apply {
@@ -1209,7 +1189,6 @@ class MainActivity : Activity() {
 
         val sendParams = LinearLayout.LayoutParams(dp(50), dp(49))
         sendParams.leftMargin = dp(7)
-
         bottom.addView(sendButton, sendParams)
         root.addView(bottom)
 
@@ -1252,6 +1231,24 @@ class MainActivity : Activity() {
 
             onMessages = { messages ->
 
+                // Отмечаем входящие сообщения прочитанными.
+                // Повторный вызов произойдёт только если есть непрочитанные.
+                val myUid = auth.currentUser?.uid ?: ""
+
+                val hasUnreadIncoming = messages.any { snapshot ->
+                    val receiver = snapshot.child("receiverId")
+                        .getValue(String::class.java)
+
+                    val isRead = snapshot.child("read")
+                        .getValue(Boolean::class.java) == true
+
+                    receiver == myUid && !isRead
+                }
+
+                if (hasUnreadIncoming) {
+                    ChatManager.markMessagesRead(otherUid)
+                }
+
                 messagesContainer.removeAllViews()
 
                 if (messages.isEmpty()) {
@@ -1264,7 +1261,6 @@ class MainActivity : Activity() {
                     )
 
                 } else {
-                    val myUid = auth.currentUser?.uid ?: ""
 
                     val sorted = messages.sortedBy {
                         it.child("timestamp")
@@ -1386,8 +1382,6 @@ class MainActivity : Activity() {
                 toast(message)
             }
         )
-
-        ChatManager.markMessagesRead(otherUid)
     }
 
     // КАРТОЧКА НАСТРОЕК
