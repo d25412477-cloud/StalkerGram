@@ -1,4 +1,3 @@
-
 package com.stalkergram.app
 
 import android.app.Activity
@@ -52,6 +51,10 @@ class MainActivity : Activity() {
     private var messagesListener: ValueEventListener? = null
     private var activeChatUid: String? = null
 
+    // СЛУШАТЕЛИ СТАТУСА ПОЛЬЗОВАТЕЛЕЙ
+    private val presenceListeners =
+        mutableMapOf<String, Pair<DatabaseReference, ValueEventListener>>()
+
     private var chatSearchQuery = ""
     private var searchQuery = ""
     private var renderChats: (() -> Unit)? = null
@@ -82,6 +85,20 @@ class MainActivity : Activity() {
         } else {
             showHome()
         }
+    }
+
+    // ЗАПУСК СТАТУСА ОНЛАЙН
+    override fun onStart() {
+        super.onStart()
+        auth.currentUser?.uid?.let {
+            PresenceManager.start(it)
+        }
+    }
+
+    // ОСТАНОВКА СТАТУСА ОНЛАЙН
+    override fun onStop() {
+        PresenceManager.stop()
+        super.onStop()
     }
 
     private fun dp(value: Int): Int =
@@ -180,7 +197,9 @@ class MainActivity : Activity() {
         return box
     }
 
+    // ОЧИСТКА СЛУШАТЕЛЕЙ
     private fun clearAllListeners() {
+
         chatListListener?.let {
             ChatListManager.removeListener(it)
         }
@@ -197,10 +216,70 @@ class MainActivity : Activity() {
 
         messagesListener = null
         activeChatUid = null
+
+        // Удаляем слушатели статусов
+        presenceListeners.values.forEach { (ref, presenceListener) ->
+            ref.removeEventListener(presenceListener)
+        }
+
+        presenceListeners.clear()
+    }
+
+    // ОТСЛЕЖИВАНИЕ СТАТУСА ПОЛЬЗОВАТЕЛЯ
+    private fun listenPresence(
+        uid: String,
+        label: TextView,
+        dot: TextView? = null
+    ) {
+        // Если для этого пользователя уже есть слушатель — удаляем его
+        presenceListeners.remove(uid)?.let { old ->
+            old.first.removeEventListener(old.second)
+        }
+
+        val ref = db.child("users")
+            .child(uid)
+            .child("presence")
+
+        val listener = object : ValueEventListener {
+
+            override fun onDataChange(snapshot: DataSnapshot) {
+
+                val online = snapshot.child("online")
+                    .getValue(Boolean::class.java) == true
+
+                val lastSeen = snapshot.child("lastSeen")
+                    .getValue(Long::class.java) ?: 0L
+
+                if (online) {
+                    label.text = "● В сети"
+                    label.setTextColor(greenLight)
+                    dot?.setTextColor(greenLight)
+                } else {
+                    val recentlySeen = lastSeen > 0L &&
+                        System.currentTimeMillis() - lastSeen < 5 * 60 * 1000
+
+                    label.text = if (recentlySeen) {
+                        "Был(а) недавно"
+                    } else {
+                        "Не в сети"
+                    }
+
+                    label.setTextColor(muted)
+                    dot?.setTextColor(muted)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                label.text = "Статус недоступен"
+                label.setTextColor(muted)
+            }
+        }
+
+        presenceListeners[uid] = ref to listener
+        ref.addValueEventListener(listener)
     }
 
     // АВАТАРЫ
-
     private fun makeAvatar(name: String, size: Int = 52): TextView {
         val initial = name.trim().firstOrNull()?.toString()
             ?.uppercase(Locale.getDefault()) ?: "?"
@@ -288,7 +367,6 @@ class MainActivity : Activity() {
     }
 
     // ВЫБОР ФОТО
-
     private fun chooseProfilePhoto() {
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
             type = "image/*"
@@ -466,7 +544,6 @@ class MainActivity : Activity() {
     }
 
     // НИЖНЯЯ НАВИГАЦИЯ
-
     private fun addBottomNavigation(selected: Int) {
         val navigation = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -541,7 +618,6 @@ class MainActivity : Activity() {
     }
 
     // ГЛАВНЫЙ ЭКРАН
-
     private fun showHome() {
         clearAllListeners()
 
@@ -700,7 +776,6 @@ class MainActivity : Activity() {
     }
 
     // СОЗДАНИЕ КАНАЛА
-
     private fun showCreateChannel() {
         val uid = auth.currentUser?.uid ?: return
 
@@ -752,7 +827,6 @@ class MainActivity : Activity() {
     }
 
     // ИЗБРАННОЕ
-
     private fun showFavorites() {
         clearAllListeners()
         newRoot()
@@ -786,7 +860,6 @@ class MainActivity : Activity() {
     }
 
     // СПИСОК ЧАТОВ
-
     private fun loadChats(container: LinearLayout) {
         renderChats = null
 
@@ -859,6 +932,7 @@ class MainActivity : Activity() {
         )
     }
 
+    // СТРОКА ЧАТА
     private fun makeListItem(
         uid: String,
         name: String,
@@ -891,6 +965,11 @@ class MainActivity : Activity() {
         }
 
         texts.addView(makeText(name, 16f, textColor, true))
+
+        // СТАТУС ОНЛАЙН ПОД ИМЕНЕМ
+        val onlineLabel = makeText("Проверяем статус...", 11f, muted)
+        texts.addView(onlineLabel)
+        listenPresence(uid, onlineLabel)
 
         val messageText = makeText(message, 13f, muted)
         messageText.maxLines = 1
@@ -940,7 +1019,6 @@ class MainActivity : Activity() {
     }
 
     // КОНТАКТЫ
-
     private fun showContacts() {
         clearAllListeners()
 
@@ -1076,7 +1154,6 @@ class MainActivity : Activity() {
     }
 
     // ЭКРАН ЧАТА
-
     private fun openChat(otherUid: String, username: String) {
         clearAllListeners()
         activeChatUid = otherUid
@@ -1121,7 +1198,11 @@ class MainActivity : Activity() {
         }
 
         titleBox.addView(makeText(username, 16f, textColor, true))
-        titleBox.addView(makeText("StalkerGram", 11f, green))
+
+        // СТАТУС ОНЛАЙН В ШАПКЕ ЧАТА
+        val onlineLabel = makeText("Проверяем статус...", 11f, muted)
+        titleBox.addView(onlineLabel)
+        listenPresence(otherUid, onlineLabel)
 
         headerBox.addView(
             titleBox,
@@ -1146,7 +1227,6 @@ class MainActivity : Activity() {
         )
 
         // ПАНЕЛЬ ВВОДА
-
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1225,14 +1305,11 @@ class MainActivity : Activity() {
         }
 
         // ПОЛУЧЕНИЕ СООБЩЕНИЙ
-
         messagesListener = ChatManager.listenMessages(
             otherUid,
 
             onMessages = { messages ->
 
-                // Отмечаем входящие сообщения прочитанными.
-                // Повторный вызов произойдёт только если есть непрочитанные.
                 val myUid = auth.currentUser?.uid ?: ""
 
                 val hasUnreadIncoming = messages.any { snapshot ->
@@ -1385,7 +1462,6 @@ class MainActivity : Activity() {
     }
 
     // КАРТОЧКА НАСТРОЕК
-
     private fun settingsCard(): LinearLayout {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1395,7 +1471,6 @@ class MainActivity : Activity() {
     }
 
     // ПРОФИЛЬ
-
     private fun showProfile() {
         clearAllListeners()
         selectedSection = 3
@@ -1550,6 +1625,7 @@ class MainActivity : Activity() {
                 .setNegativeButton("Отмена", null)
                 .setPositiveButton("Выйти") { _, _ ->
                     clearAllListeners()
+                    PresenceManager.stop()
                     auth.signOut()
                     showAuth(false)
                 }
@@ -1596,7 +1672,6 @@ class MainActivity : Activity() {
     }
 
     // РЕДАКТИРОВАНИЕ ПРОФИЛЯ
-
     private fun showEditField(
         field: String,
         title: String,
@@ -1845,7 +1920,6 @@ class MainActivity : Activity() {
     }
 
     // НАСТРОЙКИ
-
     private fun settingsRow(
         icon: String,
         title: String,
@@ -2031,7 +2105,6 @@ class MainActivity : Activity() {
     }
 
     // АВТОРИЗАЦИЯ
-
     private fun showAuth(registerMode: Boolean) {
         clearAllListeners()
         newRoot()
@@ -2203,6 +2276,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         clearAllListeners()
+        PresenceManager.stop()
         imageExecutor.shutdown()
         super.onDestroy()
     }
