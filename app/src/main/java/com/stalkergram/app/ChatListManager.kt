@@ -17,6 +17,9 @@ object ChatListManager {
     private val db = FirebaseConfig.database.reference
     private val auth = FirebaseAuth.getInstance()
 
+    private val messageListeners =
+        mutableMapOf<String, ValueEventListener>()
+
     fun listenChats(
         callback: (List<ChatPreview>) -> Unit,
         onError: (String) -> Unit
@@ -29,15 +32,13 @@ object ChatListManager {
             return null
         }
 
+        removeAllMessageListeners()
+
         val listener = object : ValueEventListener {
 
             override fun onDataChange(snapshot: DataSnapshot) {
-                if (!snapshot.exists()) {
-                    callback(emptyList())
-                    return
-                }
+                removeAllMessageListeners()
 
-                val previews = mutableListOf<ChatPreview>()
                 val chats = snapshot.children.toList()
 
                 if (chats.isEmpty()) {
@@ -45,73 +46,122 @@ object ChatListManager {
                     return
                 }
 
-                var completed = 0
+                val previews = mutableMapOf<String, ChatPreview>()
+                val pending = mutableSetOf<String>()
 
                 for (chat in chats) {
+                    val chatId = chat.key ?: continue
                     val otherUid = chat.child("otherUid")
                         .getValue(String::class.java)
 
-                    if (otherUid.isNullOrBlank()) {
-                        completed++
-                        if (completed == chats.size) {
-                            callback(previews.sortedByDescending { it.timestamp })
-                        }
-                        continue
-                    }
+                    if (otherUid.isNullOrBlank()) continue
 
-                    val lastMessage = chat.child("lastMessage")
-                        .getValue(String::class.java) ?: ""
+                    pending.add(chatId)
 
-                    val timestamp = chat.child("timestamp")
-                        .getValue(Long::class.java) ?: 0L
-
-                    val unreadCount = chat.child("unreadCount")
-                        .getValue(Int::class.java) ?: 0
-
-                    db.child("users").child(otherUid)
+                    db.child("users")
+                        .child(otherUid)
                         .child("username")
                         .get()
                         .addOnSuccessListener { user ->
-                            val username = user.getValue(String::class.java)
-                                ?: "Пользователь"
 
-                            previews.add(
-                                ChatPreview(
-                                    uid = otherUid,
-                                    username = username,
-                                    lastMessage = lastMessage,
-                                    timestamp = timestamp,
-                                    unreadCount = unreadCount
-                                )
-                            )
+                            val username =
+                                user.getValue(String::class.java)
+                                    ?: "Пользователь"
 
-                            completed++
+                            val messagesRef = db.child("chats")
+                                .child(chatId)
+                                .child("messages")
 
-                            if (completed == chats.size) {
-                                callback(
-                                    previews.sortedByDescending { it.timestamp }
-                                )
-                            }
+                            val messagesListener =
+                                object : ValueEventListener {
+
+                                    override fun onDataChange(
+                                        messages: DataSnapshot
+                                    ) {
+                                        var lastText = ""
+                                        var lastTime = 0L
+                                        var unread = 0
+
+                                        for (message in messages.children) {
+                                            val sender = message.child("senderId")
+                                                .getValue(String::class.java)
+
+                                            val receiver = message.child("receiverId")
+                                                .getValue(String::class.java)
+
+                                            val text = message.child("text")
+                                                .getValue(String::class.java) ?: ""
+
+                                            val type = message.child("type")
+                                                .getValue(String::class.java)
+
+                                            val time = message.child("timestamp")
+                                                .getValue(Long::class.java) ?: 0L
+
+                                            val read = message.child("read")
+                                                .getValue(Boolean::class.java) ?: false
+
+                                            if (time >= lastTime) {
+                                                lastTime = time
+                                                lastText = if (type == "image") {
+                                                    "📷 Фото"
+                                                } else {
+                                                    text
+                                                }
+                                            }
+
+                                            if (receiver == myUid &&
+                                                sender == otherUid &&
+                                                !read
+                                            ) {
+                                                unread++
+                                            }
+                                        }
+
+                                        previews[chatId] = ChatPreview(
+                                            uid = otherUid,
+                                            username = username,
+                                            lastMessage = lastText,
+                                            timestamp = lastTime,
+                                            unreadCount = unread
+                                        )
+
+                                        pending.remove(chatId)
+
+                                        if (pending.isEmpty()) {
+                                            callback(
+                                                previews.values.sortedByDescending {
+                                                    it.timestamp
+                                                }
+                                            )
+                                        }
+                                    }
+
+                                    override fun onCancelled(
+                                        error: DatabaseError
+                                    ) {
+                                        onError(error.message)
+                                    }
+                                }
+
+                            messageListeners[chatId] = messagesListener
+                            messagesRef.addValueEventListener(messagesListener)
                         }
                         .addOnFailureListener {
-                            previews.add(
-                                ChatPreview(
-                                    uid = otherUid,
-                                    username = "Пользователь",
-                                    lastMessage = lastMessage,
-                                    timestamp = timestamp,
-                                    unreadCount = unreadCount
-                                )
-                            )
+                            pending.remove(chatId)
 
-                            completed++
-
-                            if (completed == chats.size) {
+                            if (pending.isEmpty()) {
                                 callback(
-                                    previews.sortedByDescending { it.timestamp }
+                                    previews.values.sortedByDescending {
+                                        it.timestamp
+                                    }
                                 )
                             }
                         }
+                }
+
+                if (pending.isEmpty()) {
+                    callback(emptyList())
                 }
             }
 
@@ -120,16 +170,33 @@ object ChatListManager {
             }
         }
 
-        db.child("userChats").child(myUid)
+        db.child("userChats")
+            .child(myUid)
             .addValueEventListener(listener)
 
         return listener
     }
 
+    private fun removeAllMessageListeners() {
+        val myUid = auth.currentUser?.uid ?: return
+
+        for ((chatId, listener) in messageListeners) {
+            db.child("chats")
+                .child(chatId)
+                .child("messages")
+                .removeEventListener(listener)
+        }
+
+        messageListeners.clear()
+    }
+
     fun removeListener(listener: ValueEventListener) {
         val myUid = auth.currentUser?.uid ?: return
 
-        db.child("userChats").child(myUid)
+        db.child("userChats")
+            .child(myUid)
             .removeEventListener(listener)
+
+        removeAllMessageListeners()
     }
 }
